@@ -1,0 +1,7 @@
+{
+  "name": "Warehouse Stock Tracker - BBM & Fumigasi",
+  "description": "Sistem pelacakan inventaris stok real-time gudang untuk BBM (Solar, Pertamax), obat fumigasi, spraying fogging, dan perlengkapan teknis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
