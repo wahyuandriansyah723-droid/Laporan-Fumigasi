@@ -16,9 +16,10 @@ import {
   BatchItem,
 } from './types/inventory';
 import { AuthUser } from './types/auth';
-import { INITIAL_AUTH_USERS } from './data/initialAuthUsers';
+import { INITIAL_AUTH_USERS, loadStoredAuthUsers, saveStoredAuthUsers } from './data/initialAuthUsers';
 import { LoginScreen } from './components/LoginScreen';
 import { LoginDashboard } from './components/LoginDashboard';
+import { AdminUsersManagementView } from './components/AdminUsersManagementView';
 import { UserProfileMenu } from './components/UserProfileMenu';
 import { QCInspectionModal } from './components/QCInspectionModal';
 import { INITIAL_ITEMS, INITIAL_TRANSACTIONS } from './data/initialData';
@@ -52,8 +53,9 @@ import { OperatorJobInputModal } from './components/OperatorJobInputModal';
 import { AdminCrossCheckView } from './components/AdminCrossCheckView';
 import { RawMaterialRecommendationsView } from './components/RawMaterialRecommendationsView';
 import { RawMaterialRecommendationModal } from './components/RawMaterialRecommendationModal';
-import { FumigationJobReport } from './types/jobs';
-import { RawMaterialRecommendation } from './types/recommendations';
+import { TreatmentExecutionModal } from './components/TreatmentExecutionModal';
+import { FumigationJobReport, JobType } from './types/jobs';
+import { RawMaterialRecommendation, TreatmentExecutionRecord } from './types/recommendations';
 import { INITIAL_JOB_REPORTS } from './data/initialJobReports';
 import { INITIAL_RAW_RECOMMENDATIONS } from './data/initialRecommendations';
 import { exportInventoryToCSV, exportMutationsToCSV } from './utils/exportImport';
@@ -84,6 +86,7 @@ import {
   Flame,
   Bug,
   KeyRound,
+  Users,
   Sparkles,
 } from 'lucide-react';
 import { isBelowMinimumThreshold, isCriticallyBelowThreshold } from './utils/stockUtils';
@@ -104,30 +107,8 @@ const STORAGE_KEY_JOB_REPORTS = 'logix_warehouse_job_reports_v1';
 const STORAGE_KEY_RAW_RECOMMENDATIONS = 'logix_warehouse_raw_recommendations_v1';
 
 export default function App() {
-  // Authentication State (ADMIN, OPERATOR, QC)
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_AUTH_USER);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.id && parsed.role) {
-          // Sync canonical role permissions
-          const canonical = INITIAL_AUTH_USERS.find((u) => u.id === parsed.id || u.role === parsed.role);
-          if (canonical) {
-            return {
-              ...canonical,
-              ...parsed,
-              permissions: canonical.permissions,
-            };
-          }
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load auth user:', e);
-    }
-    return null;
-  });
+  // Authentication State: Sesuai permintaan pengguna, saat awal masuk link atau membuka program selalu kembali ke tampilan login
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
 
   const [isQCModalOpen, setIsQCModalOpen] = useState(false);
 
@@ -370,29 +351,34 @@ export default function App() {
 
   useEffect(() => {
     try {
-      if (currentUser) {
-        localStorage.setItem(STORAGE_KEY_AUTH_USER, JSON.stringify(currentUser));
-      } else {
-        localStorage.removeItem(STORAGE_KEY_AUTH_USER);
-      }
+      // Pastikan sesi selalu kembali ke tampilan login saat masuk link atau program baru
+      localStorage.removeItem(STORAGE_KEY_AUTH_USER);
     } catch (e) {
-      console.error('Failed to save auth user:', e);
+      console.error('Failed to clear auth user session:', e);
     }
   }, [currentUser]);
+
+  // Persistent state for authenticated users (Admin can add, edit, and delete accounts)
+  const [authUsers, setAuthUsers] = useState<AuthUser[]>(() => loadStoredAuthUsers());
 
   // Current view tabs:
   type AppTab =
     | 'dashboard'
     | 'inventory'
     | 'qc_reports'
+    | 'reports_fumigasi'
+    | 'reports_spraying'
     | 'raw_material_recommendations'
+    | 'rec_fumigasi'
+    | 'rec_spraying'
     | 'crosscheck'
     | 'mutations'
     | 'outflows'
     | 'opname'
     | 'master'
     | 'settings'
-    | 'login_dashboard';
+    | 'login_dashboard'
+    | 'admin_users';
 
   const [currentTab, setCurrentTab] = useState<AppTab>(() => {
     return currentUser?.role === 'QC' ? 'qc_reports' : 'dashboard';
@@ -400,11 +386,17 @@ export default function App() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<Category | 'ALL'>('ALL');
 
-  // Guard for QC: Cannot access dashboard or login_dashboard
+  // Guard for QC & Operator: QC cannot access dashboard, login_dashboard, or admin_users; Operator cannot access login_dashboard or admin_users
   useEffect(() => {
     if (currentUser?.role === 'QC') {
-      if (currentTab === 'dashboard' || currentTab === 'login_dashboard') {
+      if (currentTab === 'dashboard' || currentTab === 'login_dashboard' || currentTab === 'admin_users') {
         setCurrentTab('qc_reports');
+      }
+    } else if (currentUser?.role === 'OPERATOR') {
+      if (currentTab === 'login_dashboard' || currentTab === 'admin_users') {
+        setCurrentTab('dashboard');
+      } else if (currentTab === 'qc_reports') {
+        setCurrentTab('reports_fumigasi');
       }
     }
   }, [currentUser, currentTab]);
@@ -454,10 +446,16 @@ export default function App() {
   }, [rawRecommendations]);
 
   const [isRawRecModalOpen, setIsRawRecModalOpen] = useState(false);
+  const [rawRecInitialType, setRawRecInitialType] = useState<'FUMIGASI' | 'SPRAYING_FOGGING'>('FUMIGASI');
   const [rawRecToEdit, setRawRecToEdit] = useState<RawMaterialRecommendation | null>(null);
   const [recToExecuteAsSPK, setRecToExecuteAsSPK] = useState<RawMaterialRecommendation | null>(null);
 
+  // Perintah Realisasi Pengerjaan Fumigasi / Spraying / Fogging Modal State
+  const [isTreatmentExecutionModalOpen, setIsTreatmentExecutionModalOpen] = useState(false);
+  const [recForExecutionModal, setRecForExecutionModal] = useState<RawMaterialRecommendation | null>(null);
+
   const [isOperatorJobModalOpen, setIsOperatorJobModalOpen] = useState(false);
+  const [operatorModalInitialJobType, setOperatorModalJobType] = useState<JobType>('FUMIGASI');
 
   // Proactive threshold calculation for visual notification & badges
   const belowThresholdCount = React.useMemo(
@@ -522,13 +520,13 @@ export default function App() {
     }, 3500);
   };
 
-  // Handler: Commit Transaction
-  const handleSaveTransaction = (trxData: Omit<StockTransaction, 'id' | 'timestamp'>) => {
+  // Handler: Commit Transaction (Input Pengeluaran / Penerimaan)
+  const handleSaveTransaction = (trxData: Omit<StockTransaction, 'id' | 'timestamp'> & { timestamp?: string }) => {
     const newTrx: StockTransaction = {
       ...trxData,
       operator: trxData.operator || (currentUser ? currentUser.name : 'Petugas Gudang'),
       id: `trx-${Date.now()}`,
-      timestamp: new Date().toISOString(),
+      timestamp: trxData.timestamp || new Date().toISOString(),
     };
 
     // Update item stock
@@ -559,10 +557,64 @@ export default function App() {
     }
   };
 
-  // Handler: Update Existing Transaction (Edit Mutasi)
+  // Handler: Update Existing Transaction (Edit Mutasi & Pengeluaran dengan Penyesuaian Stok Otomatis)
   const handleUpdateTransaction = (updatedTrx: StockTransaction) => {
+    const oldTrx = transactions.find((t) => t.id === updatedTrx.id);
+
+    if (oldTrx) {
+      // Re-calculate inventory stock if quantity or itemId changed
+      setItems((prevItems) => {
+        let newItems = [...prevItems];
+
+        if (oldTrx.itemId === updatedTrx.itemId) {
+          const qtyDiff = updatedTrx.quantity - oldTrx.quantity;
+          if (qtyDiff !== 0) {
+            newItems = newItems.map((item) => {
+              if (item.id === updatedTrx.itemId) {
+                let adjusted = item.currentStock;
+                if (updatedTrx.type === 'OUT') {
+                  // Outflow changed: jika keluar bertambah, stok berkurang; jika keluar berkurang, stok bertambah
+                  adjusted = Math.max(0, item.currentStock - qtyDiff);
+                } else if (updatedTrx.type === 'IN') {
+                  adjusted = Math.max(0, item.currentStock + qtyDiff);
+                } else if (updatedTrx.type === 'ADJUSTMENT') {
+                  adjusted = updatedTrx.quantity;
+                }
+                return {
+                  ...item,
+                  currentStock: adjusted,
+                  lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
+                };
+              }
+              return item;
+            });
+          }
+        } else {
+          // Item changed: revert old item stock, apply to new item stock
+          newItems = newItems.map((item) => {
+            if (item.id === oldTrx.itemId) {
+              const revertedStock =
+                oldTrx.type === 'OUT'
+                  ? item.currentStock + oldTrx.quantity
+                  : Math.max(0, item.currentStock - oldTrx.quantity);
+              return { ...item, currentStock: revertedStock };
+            }
+            if (item.id === updatedTrx.itemId) {
+              const adjustedStock =
+                updatedTrx.type === 'OUT'
+                  ? Math.max(0, item.currentStock - updatedTrx.quantity)
+                  : item.currentStock + updatedTrx.quantity;
+              return { ...item, currentStock: adjustedStock };
+            }
+            return item;
+          });
+        }
+        return newItems;
+      });
+    }
+
     setTransactions((prev) => prev.map((t) => (t.id === updatedTrx.id ? updatedTrx : t)));
-    showToast(`Mutasi ${updatedTrx.referenceNo} berhasil diperbarui & disimpan.`);
+    showToast(`Pengeluaran / Mutasi ${updatedTrx.referenceNo} berhasil diperbarui & stok disinkronkan.`);
   };
 
   // Handler: Delete Transaction with Optional Stock Reversion
@@ -746,6 +798,8 @@ export default function App() {
     setCurrentUser(user);
     if (user.role === 'QC') {
       setCurrentTab('qc_reports');
+    } else if (user.role === 'OPERATOR' && currentTab === 'login_dashboard') {
+      setCurrentTab('dashboard');
     }
     showToast(`Beralih akun ke: ${user.name} (${user.roleTitle})`);
   };
@@ -893,6 +947,112 @@ export default function App() {
   const handleExecuteRecAsSPK = (rec: RawMaterialRecommendation) => {
     setRecToExecuteAsSPK(rec);
     setIsOperatorJobModalOpen(true);
+  };
+
+  // Handler: Konfirmasi Perintah Realisasi Pengerjaan Fumigasi / Spraying / Fogging
+  const handleConfirmTreatmentExecution = (
+    recId: string,
+    executionRecord: TreatmentExecutionRecord,
+    stockDeduction?: { itemId: string; quantity: number }
+  ) => {
+    // 1. Update status rekomendasi menjadi SELESAI dan lampirkan riwayat realisasi pengerjaan
+    setRawRecommendations((prev) =>
+      prev.map((rec) =>
+        rec.id === recId
+          ? {
+              ...rec,
+              status: 'SELESAI' as const,
+              treatmentExecutionRecord: executionRecord,
+              processedByOperator: executionRecord.executedBy,
+              processedAt: executionRecord.completedAt,
+            }
+          : rec
+      )
+    );
+
+    // 2. Jika dipilih potong stok otomatis, catat transaksi OUT di mutasi dan update stok barang inventaris
+    if (stockDeduction && stockDeduction.quantity > 0) {
+      const medItem = items.find((i) => i.id === stockDeduction.itemId);
+      if (medItem) {
+        const prevStock = medItem.currentStock;
+        const newStock = Math.max(0, prevStock - stockDeduction.quantity);
+        const nowIso = new Date().toISOString();
+
+        const outTrx: StockTransaction = {
+          id: `trx-exec-${Date.now()}`,
+          timestamp: nowIso,
+          type: 'OUT',
+          itemId: medItem.id,
+          sku: medItem.sku,
+          itemName: medItem.name,
+          category: medItem.category,
+          quantity: stockDeduction.quantity,
+          unit: executionRecord.usedMedicineUnit || medItem.unit,
+          previousStock: prevStock,
+          newStock: newStock,
+          referenceNo: `REALISASI-${executionRecord.treatmentType.slice(0, 3)}-${Date.now().toString().slice(-4)}`,
+          projectOrLocation: `${executionRecord.warehouseLocation} (${executionRecord.treatedTonnage} ${executionRecord.tonnageUnit})`,
+          operator: executionRecord.executedBy,
+          notes: `Realisasi ${executionRecord.treatmentType}: Obat ${executionRecord.usedMedicineName} pada ${executionRecord.warehouseLocation} (${executionRecord.treatedTonnage} ${executionRecord.tonnageUnit}). ${executionRecord.executionNotes || ''}`,
+        };
+
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === medItem.id
+              ? {
+                  ...item,
+                  currentStock: newStock,
+                  lastUpdated: nowIso.replace('T', ' ').slice(0, 16),
+                }
+              : item
+          )
+        );
+
+        setTransactions((prev) => [outTrx, ...prev]);
+      }
+    }
+
+    setIsTreatmentExecutionModalOpen(false);
+    setRecForExecutionModal(null);
+    showToast(
+      `✓ Konfirmasi pengerjaan ${executionRecord.treatmentType} berhasil dicatat & status rekomendasi telah SELESAI!`
+    );
+  };
+
+  // ================= ADMIN: KELOLA ID & PASSWORD PENGGUNA =================
+  const handleSaveUser = (user: AuthUser, isNew: boolean) => {
+    setAuthUsers((prev) => {
+      const exists = prev.some((u) => u.id === user.id);
+      const updated = exists ? prev.map((u) => (u.id === user.id ? user : u)) : [user, ...prev];
+      saveStoredAuthUsers(updated);
+      return updated;
+    });
+
+    if (currentUser && currentUser.id === user.id) {
+      setCurrentUser(user);
+    }
+
+    showToast(
+      isNew
+        ? `Akun ID "${user.username}" (${user.name}) berhasil dibuat.`
+        : `Data ID & kata sandi "${user.username}" berhasil diperbarui.`
+    );
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    const adminCount = authUsers.filter((u) => u.role === 'ADMIN').length;
+    const target = authUsers.find((u) => u.id === userId);
+    if (target?.role === 'ADMIN' && adminCount <= 1) {
+      alert('Tidak dapat menghapus Administrator utama. Sistem harus memiliki minimal 1 akun Admin.');
+      return;
+    }
+
+    setAuthUsers((prev) => {
+      const updated = prev.filter((u) => u.id !== userId);
+      saveStoredAuthUsers(updated);
+      return updated;
+    });
+    showToast(`Akun ID "${target?.username || userId}" telah dihapus.`);
   };
 
   // Reset to initial demo dataset
@@ -1113,15 +1273,16 @@ export default function App() {
     }
   };
 
-  // Return LoginDashboard if no user is authenticated
+  // Return LoginScreen if no user is authenticated
   if (!currentUser) {
     return (
-      <LoginDashboard
+      <LoginScreen
         onLoginSuccess={handleLoginSuccess}
         currentUser={null}
         items={items}
         transactions={transactions}
         jobReports={jobReports}
+        authUsers={authUsers}
       />
     );
   }
@@ -1253,40 +1414,104 @@ export default function App() {
             </div>
           )}
 
-          {/* 1. Laporan Fumigasi & Spraying (QC Hub / Riwayat SPK) */}
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentTab('qc_reports');
-              setIsMobileSidebarOpen(false);
-            }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              currentTab === 'qc_reports'
-                ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <FileCheck2 className="w-4 h-4 shrink-0" />
-              <span className="truncate">
-                {currentUser.role === 'QC'
-                  ? 'Laporan Fumigasi & Fogging'
-                  : currentUser.role === 'OPERATOR'
-                  ? 'Laporan Pekerjaan Saya'
-                  : 'Laporan Fumigasi & Fogging'}
-              </span>
-            </div>
-            {jobReports.filter((j) => j.qcApprovalStatus === 'PENDING').length > 0 && (
-              <span
-                className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold ${
-                  currentTab === 'qc_reports' ? 'bg-slate-950/20 text-slate-950' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+          {/* 1. Laporan Fumigasi & Spraying (Dipisahkan untuk Operator, Terpadu untuk QC & Admin) */}
+          {currentUser.role === 'OPERATOR' ? (
+            <div className="space-y-1.5">
+              {/* Laporan Fumigasi Khusus Operator */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentTab('reports_fumigasi');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  currentTab === 'reports_fumigasi'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
-                title="Laporan menunggu verifikasi QC"
               >
-                {jobReports.filter((j) => j.qcApprovalStatus === 'PENDING').length} Baru
-              </span>
-            )}
-          </button>
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Flame className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span className="truncate">Laporan Fumigasi</span>
+                </div>
+                {jobReports.filter((j) => (j.jobType || 'FUMIGASI') === 'FUMIGASI' && j.qcApprovalStatus === 'PENDING').length > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold ${
+                      currentTab === 'reports_fumigasi'
+                        ? 'bg-slate-950/20 text-slate-950'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    }`}
+                    title="Laporan fumigasi menunggu QC"
+                  >
+                    {jobReports.filter((j) => (j.jobType || 'FUMIGASI') === 'FUMIGASI' && j.qcApprovalStatus === 'PENDING').length} Baru
+                  </span>
+                )}
+              </button>
+
+              {/* Laporan Spraying & Fogging Khusus Operator */}
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentTab('reports_spraying');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  currentTab === 'reports_spraying'
+                    ? 'bg-sky-500 text-slate-950 font-bold shadow-md shadow-sky-500/20'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Bug className="w-4 h-4 shrink-0 text-sky-400" />
+                  <span className="truncate">Laporan Spraying &amp; Fogging</span>
+                </div>
+                {jobReports.filter((j) => j.jobType === 'SPRAYING_FOGGING' && j.qcApprovalStatus === 'PENDING').length > 0 && (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold ${
+                      currentTab === 'reports_spraying'
+                        ? 'bg-slate-950/20 text-slate-950'
+                        : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                    }`}
+                    title="Laporan spraying fogging menunggu QC"
+                  >
+                    {jobReports.filter((j) => j.jobType === 'SPRAYING_FOGGING' && j.qcApprovalStatus === 'PENDING').length} Baru
+                  </span>
+                )}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentTab('qc_reports');
+                setIsMobileSidebarOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                currentTab === 'qc_reports'
+                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <FileCheck2 className="w-4 h-4 shrink-0" />
+                <span className="truncate">
+                  {currentUser.role === 'QC'
+                    ? 'Laporan Fumigasi & Fogging'
+                    : 'Laporan Fumigasi & Fogging'}
+                </span>
+              </div>
+              {jobReports.filter((j) => j.qcApprovalStatus === 'PENDING').length > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold ${
+                    currentTab === 'qc_reports' ? 'bg-slate-950/20 text-slate-950' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                  }`}
+                  title="Laporan menunggu verifikasi QC"
+                >
+                  {jobReports.filter((j) => j.qcApprovalStatus === 'PENDING').length} Baru
+                </span>
+              )}
+            </button>
+          )}
 
           {/* 2. Kroscek & Audit Terpadu (Khusus Admin: "bisa kroscek semua") */}
           {currentUser.permissions.canCrossCheckAll && (
@@ -1316,42 +1541,70 @@ export default function App() {
             </button>
           )}
 
-          {/* Rekomendasi Bahan Baku yang akan Difumigasi (QC, Operator, Admin) */}
-          <button
-            type="button"
-            onClick={() => {
-              setCurrentTab('raw_material_recommendations');
-              setIsMobileSidebarOpen(false);
-            }}
-            className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              currentTab === 'raw_material_recommendations'
-                ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
-                : 'text-emerald-300 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <Sparkles className="w-4 h-4 shrink-0 text-emerald-400" />
-              <span className="truncate">
-                {currentUser.role === 'QC'
-                  ? 'Rekomendasi Bahan Baku'
-                  : currentUser.role === 'OPERATOR'
-                  ? 'Rekomendasi Bahan Baku (QC)'
-                  : 'Rekomendasi Bahan Baku'}
-              </span>
-            </div>
-            {rawRecommendations.filter((r) => r.status === 'TERKIRIM').length > 0 && (
-              <span
-                className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold ${
-                  currentTab === 'raw_material_recommendations'
-                    ? 'bg-slate-950/20 text-slate-950'
-                    : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                }`}
-                title="Rekomendasi menunggu eksekusi"
-              >
-                {rawRecommendations.filter((r) => r.status === 'TERKIRIM').length} Siap
-              </span>
-            )}
-          </button>
+          {/* Rekomendasi Bahan Baku - Dipisahkan antara Fumigasi dan Spraying/Fogging */}
+          <div className="space-y-1 pt-1 border-t border-slate-800/60">
+            {/* 1. Rekomendasi Fumigasi Bahan Baku */}
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentTab('rec_fumigasi');
+                setIsMobileSidebarOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                currentTab === 'rec_fumigasi'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                  : 'text-amber-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Flame className="w-4 h-4 shrink-0 text-amber-400" />
+                <span className="truncate">Rekomendasi Fumigasi BB</span>
+              </div>
+              {rawRecommendations.filter((r) => (r.recommendedTreatmentType || 'FUMIGASI') === 'FUMIGASI' && r.status === 'TERKIRIM').length > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold ${
+                    currentTab === 'rec_fumigasi'
+                      ? 'bg-slate-950/20 text-slate-950'
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  }`}
+                  title="Rekomendasi fumigasi menunggu eksekusi"
+                >
+                  {rawRecommendations.filter((r) => (r.recommendedTreatmentType || 'FUMIGASI') === 'FUMIGASI' && r.status === 'TERKIRIM').length} Siap
+                </span>
+              )}
+            </button>
+
+            {/* 2. Rekomendasi Spraying & Fogging Bahan Baku */}
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentTab('rec_spraying');
+                setIsMobileSidebarOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                currentTab === 'rec_spraying'
+                  ? 'bg-sky-500 text-slate-950 font-bold shadow-md shadow-sky-500/20'
+                  : 'text-sky-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Bug className="w-4 h-4 shrink-0 text-sky-400" />
+                <span className="truncate">Rekomendasi Spraying BB</span>
+              </div>
+              {rawRecommendations.filter((r) => r.recommendedTreatmentType === 'SPRAYING_FOGGING' && r.status === 'TERKIRIM').length > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold ${
+                    currentTab === 'rec_spraying'
+                      ? 'bg-slate-950/20 text-slate-950'
+                      : 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                  }`}
+                  title="Rekomendasi spraying/fogging menunggu eksekusi"
+                >
+                  {rawRecommendations.filter((r) => r.recommendedTreatmentType === 'SPRAYING_FOGGING' && r.status === 'TERKIRIM').length} Siap
+                </span>
+              )}
+            </button>
+          </div>
 
           {/* 3. Dashboard & Tangki BBM (Dikecualikan untuk QC sesuai permintaan pengguna) */}
           {currentUser.role !== 'QC' && (
@@ -1545,8 +1798,38 @@ export default function App() {
             </button>
           )}
 
-          {/* 10. Dasbor Login & Portal Akses (Dikecualikan untuk QC sesuai permintaan pengguna) */}
-          {currentUser.role !== 'QC' && (
+          {/* 10. Dasbor Manajemen ID & Password Pengguna (Khusus Admin: Tambah, Edit, Hapus Akun) */}
+          {currentUser.role === 'ADMIN' && (
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentTab('admin_users');
+                setIsMobileSidebarOpen(false);
+              }}
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                currentTab === 'admin_users'
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                  : 'text-amber-300 hover:bg-slate-800 hover:text-amber-200'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Users className="w-4 h-4 shrink-0 text-amber-400" />
+                <span className="truncate">Kelola ID &amp; Password</span>
+              </div>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
+                  currentTab === 'admin_users'
+                    ? 'bg-slate-950/20 text-slate-950'
+                    : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                }`}
+              >
+                {authUsers.length} Akun
+              </span>
+            </button>
+          )}
+
+          {/* 11. Layar Tampilan Login (Pratinjau) */}
+          {currentUser.role === 'ADMIN' && (
             <button
               type="button"
               onClick={() => {
@@ -1555,23 +1838,14 @@ export default function App() {
               }}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 currentTab === 'login_dashboard'
-                  ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
-                  : 'text-amber-400 hover:bg-slate-800 hover:text-amber-300'
+                  ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <KeyRound className="w-4 h-4 shrink-0 text-amber-400" />
-                <span className="truncate">Dasbor Login &amp; Portal</span>
+                <KeyRound className="w-4 h-4 shrink-0 text-cyan-400" />
+                <span className="truncate">Pratinjau Layar Login</span>
               </div>
-              <span
-                className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-bold ${
-                  currentTab === 'login_dashboard'
-                    ? 'bg-slate-950/20 text-slate-950'
-                    : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                }`}
-              >
-                Portal
-              </span>
             </button>
           )}
         </div>
@@ -1626,6 +1900,8 @@ export default function App() {
                   (currentUser.role === 'OPERATOR'
                     ? 'Laporan Pekerjaan Saya (Status QC)'
                     : 'Laporan Pekerjaan Fumigasi & Spraying Fogging (QC Hub)')}
+                {currentTab === 'reports_fumigasi' && 'Laporan Pekerjaan Fumigasi'}
+                {currentTab === 'reports_spraying' && 'Laporan Pekerjaan Spraying & Fogging'}
                 {currentTab === 'raw_material_recommendations' && 'Rekomendasi Fumigasi Bahan Baku'}
                 {currentTab === 'crosscheck' && 'Kroscek & Audit Terpadu (Admin)'}
                 {currentTab === 'mutations' && 'Buku Mutasi Transaksi'}
@@ -1633,7 +1909,8 @@ export default function App() {
                 {currentTab === 'opname' && 'Stock Opname Fisik Gudang'}
                 {currentTab === 'master' && 'Master Data Gudang & Logistik'}
                 {currentTab === 'settings' && 'Pengaturan Sistem & Backup'}
-                {currentTab === 'login_dashboard' && 'Dasbor Login & Portal Otorisasi Akses'}
+                {currentTab === 'admin_users' && 'Dasbor Manajemen ID & Password Pengguna (Admin)'}
+                {currentTab === 'login_dashboard' && 'Pratinjau Layar Login'}
               </span>
               <span className="text-slate-700 hidden sm:inline">|</span>
               <span className="text-xs text-slate-400 font-mono hidden lg:inline">
@@ -1756,20 +2033,20 @@ export default function App() {
               <Scan className="w-4 h-4" />
             </button>
 
-            {/* Quick Access to Dasbor Login (Dikecualikan untuk QC sesuai permintaan pengguna) */}
-            {currentUser.role !== 'QC' && (
+            {/* Quick Access to Kelola ID & Password (Khusus Admin: Dikecualikan untuk QC dan Operator) */}
+            {currentUser.role === 'ADMIN' && (
               <button
                 type="button"
-                onClick={() => setCurrentTab('login_dashboard')}
+                onClick={() => setCurrentTab('admin_users')}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                  currentTab === 'login_dashboard'
+                  currentTab === 'admin_users'
                     ? 'bg-amber-500 text-slate-950 border-amber-400 font-bold shadow-md'
                     : 'bg-slate-800/80 hover:bg-slate-800 text-amber-400 border-slate-700/80 hover:border-amber-500/50'
                 }`}
-                title="Buka Dasbor Login & Portal Akses Peran"
+                title="Kelola ID, Password & Akun Pengguna"
               >
-                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden md:inline">Dasbor Login</span>
+                <Users className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden md:inline">Kelola ID &amp; Sandi</span>
               </button>
             )}
 
@@ -1778,7 +2055,7 @@ export default function App() {
               currentUser={currentUser}
               onSwitchUser={handleSwitchUser}
               onLogout={handleLogout}
-              onOpenLoginDashboard={currentUser.role !== 'QC' ? () => setCurrentTab('login_dashboard') : undefined}
+              onOpenLoginDashboard={currentUser.role === 'ADMIN' ? () => setCurrentTab('admin_users') : undefined}
             />
           </div>
         </header>
@@ -1792,25 +2069,117 @@ export default function App() {
             currentUser={currentUser}
             onUpdateJobReport={handleUpdateJobReport}
             onDeleteJobReport={handleDeleteJobReport}
-            onOpenNewJobModal={() => setIsOperatorJobModalOpen(true)}
+            onOpenNewJobModal={(preselectedType) => {
+              if (preselectedType) setOperatorModalJobType(preselectedType);
+              setIsOperatorJobModalOpen(true);
+            }}
             onShowToast={showToast}
           />
         )}
 
-        {currentTab === 'raw_material_recommendations' && (
+        {currentTab === 'reports_fumigasi' && (
+          <QCJobReportsView
+            jobReports={jobReports}
+            currentUser={currentUser}
+            onUpdateJobReport={handleUpdateJobReport}
+            onDeleteJobReport={handleDeleteJobReport}
+            forcedJobType="FUMIGASI"
+            onOpenNewJobModal={() => {
+              setOperatorModalJobType('FUMIGASI');
+              setIsOperatorJobModalOpen(true);
+            }}
+            onShowToast={showToast}
+          />
+        )}
+
+        {currentTab === 'reports_spraying' && (
+          <QCJobReportsView
+            jobReports={jobReports}
+            currentUser={currentUser}
+            onUpdateJobReport={handleUpdateJobReport}
+            onDeleteJobReport={handleDeleteJobReport}
+            forcedJobType="SPRAYING_FOGGING"
+            onOpenNewJobModal={() => {
+              setOperatorModalJobType('SPRAYING_FOGGING');
+              setIsOperatorJobModalOpen(true);
+            }}
+            onShowToast={showToast}
+          />
+        )}
+
+        {/* Rekomendasi Khusus Fumigasi Bahan Baku */}
+        {currentTab === 'rec_fumigasi' && (
           <RawMaterialRecommendationsView
             recommendations={rawRecommendations}
             currentUser={currentUser}
-            onOpenNewModal={() => {
+            forcedTreatmentType="FUMIGASI"
+            onOpenNewModal={(preselectedType) => {
+              setRawRecInitialType(preselectedType || 'FUMIGASI');
               setRawRecToEdit(null);
               setIsRawRecModalOpen(true);
             }}
             onEditRecommendation={(rec) => {
               setRawRecToEdit(rec);
+              setRawRecInitialType(rec.recommendedTreatmentType === 'SPRAYING_FOGGING' ? 'SPRAYING_FOGGING' : 'FUMIGASI');
               setIsRawRecModalOpen(true);
             }}
             onDeleteRecommendation={handleDeleteRawRecommendation}
             onExecuteAsSPK={handleExecuteRecAsSPK}
+            onOpenExecutionModal={(rec) => {
+              setRecForExecutionModal(rec);
+              setIsTreatmentExecutionModalOpen(true);
+            }}
+            onShowToast={showToast}
+          />
+        )}
+
+        {/* Rekomendasi Khusus Spraying & Fogging Bahan Baku */}
+        {currentTab === 'rec_spraying' && (
+          <RawMaterialRecommendationsView
+            recommendations={rawRecommendations}
+            currentUser={currentUser}
+            forcedTreatmentType="SPRAYING_FOGGING"
+            onOpenNewModal={(preselectedType) => {
+              setRawRecInitialType(preselectedType || 'SPRAYING_FOGGING');
+              setRawRecToEdit(null);
+              setIsRawRecModalOpen(true);
+            }}
+            onEditRecommendation={(rec) => {
+              setRawRecToEdit(rec);
+              setRawRecInitialType(rec.recommendedTreatmentType === 'SPRAYING_FOGGING' ? 'SPRAYING_FOGGING' : 'FUMIGASI');
+              setIsRawRecModalOpen(true);
+            }}
+            onDeleteRecommendation={handleDeleteRawRecommendation}
+            onExecuteAsSPK={handleExecuteRecAsSPK}
+            onOpenExecutionModal={(rec) => {
+              setRecForExecutionModal(rec);
+              setIsTreatmentExecutionModalOpen(true);
+            }}
+            onShowToast={showToast}
+          />
+        )}
+
+        {/* Rekomendasi Terpadu (Semua) */}
+        {currentTab === 'raw_material_recommendations' && (
+          <RawMaterialRecommendationsView
+            recommendations={rawRecommendations}
+            currentUser={currentUser}
+            onOpenNewModal={(preselectedType) => {
+              setRawRecInitialType(preselectedType || 'FUMIGASI');
+              setRawRecToEdit(null);
+              setIsRawRecModalOpen(true);
+            }}
+            onEditRecommendation={(rec) => {
+              setRawRecToEdit(rec);
+              setRawRecInitialType(rec.recommendedTreatmentType === 'SPRAYING_FOGGING' ? 'SPRAYING_FOGGING' : 'FUMIGASI');
+              setIsRawRecModalOpen(true);
+            }}
+            onDeleteRecommendation={handleDeleteRawRecommendation}
+            onExecuteAsSPK={handleExecuteRecAsSPK}
+            onOpenExecutionModal={(rec) => {
+              setRecForExecutionModal(rec);
+              setIsTreatmentExecutionModalOpen(true);
+            }}
             onShowToast={showToast}
           />
         )}
@@ -1909,6 +2278,7 @@ export default function App() {
           <OutflowReportsView
             transactions={transactions}
             items={items}
+            currentUser={currentUser}
             onPrintSuratJalan={(trx) => {
               setActiveSuratJalanTrx(trx);
               setIsSuratJalanOpen(true);
@@ -1918,6 +2288,7 @@ export default function App() {
               setTrxDefaultType('OUT');
               setIsTrxModalOpen(true);
             }}
+            onUpdateOutflow={handleUpdateTransaction}
             onDeleteOutflow={handleDeleteTransaction}
             onNavigateToMutations={() => {
               setCurrentTab('mutations');
@@ -1982,9 +2353,20 @@ export default function App() {
           />
         )}
 
+        {/* Dasbor Tambah, Edit, Hapus ID & Password (Hanya Bisa Diakses Akun Admin) */}
+        {currentTab === 'admin_users' && currentUser.role === 'ADMIN' && (
+          <AdminUsersManagementView
+            authUsers={authUsers}
+            currentUser={currentUser}
+            onSaveUser={handleSaveUser}
+            onDeleteUser={handleDeleteUser}
+            onShowToast={showToast}
+          />
+        )}
+
         {currentTab === 'login_dashboard' && (
           <div className="-mx-4 -my-6 sm:-mx-6">
-            <LoginDashboard
+            <LoginScreen
               onLoginSuccess={handleLoginSuccess}
               currentUser={currentUser}
               onLogout={handleLogout}
@@ -1995,6 +2377,7 @@ export default function App() {
               items={items}
               transactions={transactions}
               jobReports={jobReports}
+              authUsers={authUsers}
             />
           </div>
         )}
@@ -2131,6 +2514,7 @@ export default function App() {
         operators={operators}
         destinations={destinations}
         settings={settings}
+        initialJobType={operatorModalInitialJobType}
         initialRecommendation={recToExecuteAsSPK}
         onSaveJobAndDeductStock={handleSaveJobAndDeductStock}
       />
@@ -2144,7 +2528,20 @@ export default function App() {
         currentUser={currentUser}
         items={items}
         existingRecommendation={rawRecToEdit}
+        initialTreatmentType={rawRecInitialType}
         onSaveRecommendation={handleSaveRawRecommendation}
+      />
+
+      <TreatmentExecutionModal
+        isOpen={isTreatmentExecutionModalOpen}
+        onClose={() => {
+          setIsTreatmentExecutionModalOpen(false);
+          setRecForExecutionModal(null);
+        }}
+        recommendation={recForExecutionModal}
+        items={items}
+        currentUser={currentUser}
+        onConfirmExecution={handleConfirmTreatmentExecution}
       />
     </div>
   );

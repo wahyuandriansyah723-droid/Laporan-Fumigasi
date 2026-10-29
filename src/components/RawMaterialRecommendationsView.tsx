@@ -22,16 +22,19 @@ import {
   Edit3,
   ExternalLink,
   Info,
+  Scale,
 } from 'lucide-react';
 import { formatNumberID } from '../utils/formatters';
 
 interface RawMaterialRecommendationsViewProps {
   recommendations: RawMaterialRecommendation[];
   currentUser: AuthUser;
-  onOpenNewModal: () => void;
+  forcedTreatmentType?: 'FUMIGASI' | 'SPRAYING_FOGGING';
+  onOpenNewModal: (preselectedType?: 'FUMIGASI' | 'SPRAYING_FOGGING') => void;
   onEditRecommendation?: (rec: RawMaterialRecommendation) => void;
   onDeleteRecommendation?: (id: string) => void;
   onExecuteAsSPK?: (rec: RawMaterialRecommendation) => void; // Operator / Admin can execute into SPK
+  onOpenExecutionModal?: (rec: RawMaterialRecommendation) => void; // Perintah sudah dilakukan Fumigasi/Spraying/Fogging
   onUpdateStatus?: (id: string, status: RecommendationStatus, adminNotes?: string) => void;
   onShowToast: (message: string) => void;
 }
@@ -39,29 +42,48 @@ interface RawMaterialRecommendationsViewProps {
 export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendationsViewProps> = ({
   recommendations,
   currentUser,
+  forcedTreatmentType,
   onOpenNewModal,
   onEditRecommendation,
   onDeleteRecommendation,
   onExecuteAsSPK,
+  onOpenExecutionModal,
   onUpdateStatus,
   onShowToast,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<RecommendationStatus | 'ALL'>('ALL');
-  const [selectedRecForDetail, setSelectedRecForDetail] = useState<RawMaterialRecommendation | null>(null);
+  const [treatmentFilter, setTreatmentFilter] = useState<'ALL' | 'FUMIGASI' | 'SPRAYING_FOGGING'>(
+    forcedTreatmentType || 'ALL'
+  );
 
   const isQC = currentUser.role === 'QC';
   const isOperator = currentUser.role === 'OPERATOR';
   const isAdmin = currentUser.role === 'ADMIN';
 
+  // Scope recommendations by forced treatment type or interactive filter
+  const scopedByType = recommendations.filter((rec) => {
+    const recType = rec.recommendedTreatmentType || 'FUMIGASI';
+    if (forcedTreatmentType) {
+      if (forcedTreatmentType === 'FUMIGASI') {
+        return recType === 'FUMIGASI' || recType === 'KOMBINASI';
+      }
+      return recType === 'SPRAYING_FOGGING' || recType === 'KOMBINASI';
+    }
+    if (treatmentFilter !== 'ALL') {
+      return recType === treatmentFilter || recType === 'KOMBINASI';
+    }
+    return true;
+  });
+
   // Metrics
-  const totalCount = recommendations.length;
-  const pendingCount = recommendations.filter((r) => r.status === 'TERKIRIM').length;
-  const inProgressCount = recommendations.filter((r) => r.status === 'DIPROSES').length;
-  const completedCount = recommendations.filter((r) => r.status === 'SELESAI').length;
+  const totalCount = scopedByType.length;
+  const pendingCount = scopedByType.filter((r) => r.status === 'TERKIRIM').length;
+  const inProgressCount = scopedByType.filter((r) => r.status === 'DIPROSES').length;
+  const completedCount = scopedByType.filter((r) => r.status === 'SELESAI').length;
 
   // Filter
-  const filteredRecommendations = recommendations.filter((rec) => {
+  const filteredRecommendations = scopedByType.filter((rec) => {
     const matchesStatus = statusFilter === 'ALL' || rec.status === statusFilter;
     const matchesSearch =
       rec.commodityName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -92,7 +114,7 @@ export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendations
         return (
           <span className="px-2.5 py-1 rounded-full text-[10px] font-bold font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-            SELESAI DIFUMIGASI
+            SELESAI DIKERJAKAN
           </span>
         );
       case 'DITOLAK':
@@ -133,18 +155,40 @@ export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendations
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 shadow-xl">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              <FileCheck2 className="w-5 h-5" />
+            <span
+              className={`p-2 rounded-xl border ${
+                forcedTreatmentType === 'FUMIGASI'
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
+                  : forcedTreatmentType === 'SPRAYING_FOGGING'
+                  ? 'bg-sky-500/20 text-sky-400 border-sky-500/30'
+                  : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+              }`}
+            >
+              {forcedTreatmentType === 'FUMIGASI' ? (
+                <Flame className="w-5 h-5 text-amber-400" />
+              ) : forcedTreatmentType === 'SPRAYING_FOGGING' ? (
+                <Bug className="w-5 h-5 text-sky-400" />
+              ) : (
+                <FileCheck2 className="w-5 h-5" />
+              )}
             </span>
             <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
-              Rekomendasi Fumigasi Bahan Baku &amp; Komoditas
+              {forcedTreatmentType === 'FUMIGASI'
+                ? 'Rekomendasi Fumigasi Bahan Baku & Komoditas'
+                : forcedTreatmentType === 'SPRAYING_FOGGING'
+                ? 'Rekomendasi Spraying & Fogging Bahan Baku'
+                : 'Rekomendasi Bahan Baku & Komoditas'}
             </h2>
             <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 uppercase">
               QC &bull; Operator &bull; Admin
             </span>
           </div>
           <p className="text-xs text-slate-400 max-w-2xl">
-            Laporan rekomendasi resmi dari Inspektur QC untuk komoditas bahan baku (Beras, Jagung, Kopi, Pallet ISPM-15, dll) yang memerlukan fumigasi. Terhubung langsung ke Operator untuk eksekusi SPK dan ke Admin untuk pengawasan stok.
+            {forcedTreatmentType === 'FUMIGASI'
+              ? 'Laporan rekomendasi resmi dari Inspektur QC untuk komoditas bahan baku (Beras, Jagung, Kopi, Pallet ISPM-15, dll) yang memerlukan fumigasi sungkup gas kedap udara (Phosphine PH3 / CH3Br) tanpa BBM mesin. Terhubung langsung ke Operator untuk eksekusi dan Admin.'
+              : forcedTreatmentType === 'SPRAYING_FOGGING'
+              ? 'Laporan rekomendasi resmi dari Inspektur QC untuk spraying komoditas dan thermal fogging / ULV ruang gudang menggunakan mesin & BBM pelarut. Terhubung langsung ke Operator dan Admin.'
+              : 'Laporan rekomendasi resmi dari Inspektur QC untuk komoditas bahan baku (Fumigasi Gas & Spraying/Fogging Mesin). Terhubung langsung ke Operator dan Admin.'}
           </p>
         </div>
 
@@ -152,11 +196,23 @@ export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendations
         {(isQC || isAdmin) && (
           <button
             type="button"
-            onClick={onOpenNewModal}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition-all cursor-pointer shrink-0"
+            onClick={() => onOpenNewModal(forcedTreatmentType)}
+            className={`px-4 py-2.5 rounded-xl text-white font-bold text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer shrink-0 ${
+              forcedTreatmentType === 'FUMIGASI'
+                ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                : forcedTreatmentType === 'SPRAYING_FOGGING'
+                ? 'bg-sky-600 hover:bg-sky-500 shadow-sky-600/20'
+                : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+            }`}
           >
             <Plus className="w-4 h-4" />
-            <span>+ Buat Rekomendasi Bahan Baku</span>
+            <span>
+              {forcedTreatmentType === 'FUMIGASI'
+                ? '+ Buat Rekomendasi Fumigasi'
+                : forcedTreatmentType === 'SPRAYING_FOGGING'
+                ? '+ Buat Rekomendasi Spraying & Fogging'
+                : '+ Buat Rekomendasi Bahan Baku'}
+            </span>
           </button>
         )}
       </div>
@@ -279,19 +335,59 @@ export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendations
                   <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300">
                     Lot: {rec.batchOrLotNo}
                   </span>
+                  <span
+                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded ${
+                      (rec.recommendedTreatmentType || 'FUMIGASI') === 'FUMIGASI'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                    }`}
+                  >
+                    {(rec.recommendedTreatmentType || 'FUMIGASI') === 'FUMIGASI' ? (
+                      <>
+                        <Flame className="w-3 h-3 text-amber-400" />
+                        <span>FUMIGASI (BEBAS BBM)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bug className="w-3 h-3 text-sky-400" />
+                        <span>SPRAYING &amp; FOGGING</span>
+                      </>
+                    )}
+                  </span>
                   {getInfestationBadge(rec.infestationLevel)}
                   {getStatusBadge(rec.status)}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Perintah: Sudah Dilakukan Fumigasi / Spraying / Fogging */}
+                  {(isOperator || isAdmin) && onOpenExecutionModal && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenExecutionModal(rec)}
+                      className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition-all ${
+                        rec.status === 'SELESAI'
+                          ? 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/20'
+                      }`}
+                      title="Perintah konfirmasi realisasi pengerjaan Fumigasi, Spraying, atau Fogging"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>
+                        {rec.status === 'SELESAI'
+                          ? '✓ Update Realisasi Pengerjaan'
+                          : '✓ Sudah Dilakukan Fumigasi / Spraying / Fogging'}
+                      </span>
+                    </button>
+                  )}
+
                   {/* Operator: Eksekusi Jadi SPK */}
                   {(isOperator || isAdmin) && rec.status === 'TERKIRIM' && onExecuteAsSPK && (
                     <button
                       type="button"
                       onClick={() => onExecuteAsSPK(rec)}
-                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer transition-all"
+                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer transition-all"
                     >
-                      <span>⚡ Eksekusi Jadi SPK &amp; Ambil Obat</span>
+                      <span>⚡ Buat SPK</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   )}
@@ -299,7 +395,7 @@ export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendations
                   {/* Linked SPK badge if in progress or completed */}
                   {rec.linkedSpkNo && (
                     <span className="text-[11px] font-mono text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-500/30">
-                      SPK Terkait: <strong>{rec.linkedSpkNo}</strong>
+                      SPK: <strong>{rec.linkedSpkNo}</strong>
                     </span>
                   )}
 
@@ -383,7 +479,7 @@ export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendations
                       </div>
                     )}
 
-                    {rec.recommendedFuelName && (
+                    {rec.recommendedTreatmentType !== 'FUMIGASI' && rec.recommendedFuelName && (
                       <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-300 flex items-center gap-1.5">
                         <Fuel className="w-3.5 h-3.5 text-amber-400" />
                         <span>BBM: {rec.recommendedFuelName} ({rec.estimatedFuelQty} Liter)</span>
@@ -424,6 +520,97 @@ export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendations
                   </div>
                 </div>
               </div>
+
+              {/* REALISASI PENGERJAAN: SUDAH DILAKUKAN FUMIGASI / SPRAYING / FOGGING */}
+              {rec.treatmentExecutionRecord && (
+                <div className="mt-4 p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-950 to-teal-950/30 border border-emerald-500/30 space-y-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-500/20 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-emerald-300 text-xs tracking-wide">
+                          SUDAH DILAKUKAN {rec.treatmentExecutionRecord.treatmentType}
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 font-bold">
+                          SELESAI
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-slate-300 font-mono flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Tgl Pengerjaan: <strong className="text-white">{rec.treatmentExecutionRecord.executionDate}</strong></span>
+                    </div>
+                  </div>
+
+                  {/* 4 Required Input Fields Specified by User */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5 text-xs">
+                    {/* 1. Tanggal Pengerjaan */}
+                    <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 space-y-0.5">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-emerald-400" />
+                        <span>Tanggal Pengerjaan</span>
+                      </div>
+                      <div className="font-bold text-white font-mono text-xs">
+                        {rec.treatmentExecutionRecord.executionDate}
+                      </div>
+                    </div>
+
+                    {/* 2. Obat yang Digunakan */}
+                    <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 space-y-0.5">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                        <Beaker className="w-3 h-3 text-amber-400" />
+                        <span>Obat Digunakan</span>
+                      </div>
+                      <div className="font-bold text-amber-300 truncate text-xs" title={rec.treatmentExecutionRecord.usedMedicineName}>
+                        {rec.treatmentExecutionRecord.usedMedicineName}
+                      </div>
+                      <div className="text-[10px] text-slate-300 font-mono">
+                        Jumlah: <strong>{rec.treatmentExecutionRecord.usedMedicineQuantity} {rec.treatmentExecutionRecord.usedMedicineUnit}</strong>
+                      </div>
+                    </div>
+
+                    {/* 3. Gudang */}
+                    <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 space-y-0.5">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                        <Building2 className="w-3 h-3 text-blue-400" />
+                        <span>Gudang / Lokasi</span>
+                      </div>
+                      <div className="font-bold text-blue-200 text-xs truncate" title={rec.treatmentExecutionRecord.warehouseLocation}>
+                        {rec.treatmentExecutionRecord.warehouseLocation}
+                      </div>
+                    </div>
+
+                    {/* 4. Jumlah Tonase Bahan Baku */}
+                    <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 space-y-0.5">
+                      <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                        <Scale className="w-3 h-3 text-purple-400" />
+                        <span>Tonase Bahan Baku</span>
+                      </div>
+                      <div className="font-bold text-purple-200 font-mono text-sm">
+                        {formatNumberID(rec.treatmentExecutionRecord.treatedTonnage)}{' '}
+                        <span className="text-[10px] text-slate-400 font-sans">{rec.treatmentExecutionRecord.tonnageUnit}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pelaksana & Catatan */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[11px] text-slate-300 pt-1 border-t border-slate-800/80">
+                    <div>
+                      Pelaksana: <strong className="text-white font-medium">{rec.treatmentExecutionRecord.executedBy}</strong>
+                      {rec.treatmentExecutionRecord.executionNotes && (
+                        <span className="text-slate-400 ml-2 italic">
+                          &bull; "{rec.treatmentExecutionRecord.executionNotes}"
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-emerald-400/80 font-mono">
+                      Waktu Verifikasi: {new Date(rec.treatmentExecutionRecord.completedAt).toLocaleString('id-ID')}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}

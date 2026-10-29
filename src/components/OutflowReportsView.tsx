@@ -27,7 +27,12 @@ import {
   FileText,
   X,
   ShieldCheck,
+  Edit2,
+  Plus,
+  KeyRound,
+  Package,
 } from 'lucide-react';
+import { AuthUser } from '../types/auth';
 import {
   formatCurrencyIDR,
   formatNumberID,
@@ -40,8 +45,10 @@ import { HazardBadge } from './HazardBadge';
 interface OutflowReportsViewProps {
   transactions: StockTransaction[];
   items: InventoryItem[];
+  currentUser?: AuthUser;
   onPrintSuratJalan?: (trx: StockTransaction) => void;
   onOpenNewOutflow?: () => void;
+  onUpdateOutflow?: (updatedTrx: StockTransaction) => void;
   onDeleteOutflow?: (trxId: string, revertStock: boolean) => void;
   onNavigateToMutations?: (searchQuery?: string) => void;
   onNavigateToInventory?: (sku?: string) => void;
@@ -53,8 +60,10 @@ type PeriodMode = 'all' | 'daily' | 'monthly' | 'yearly';
 export const OutflowReportsView: React.FC<OutflowReportsViewProps> = ({
   transactions,
   items,
+  currentUser,
   onPrintSuratJalan,
   onOpenNewOutflow,
+  onUpdateOutflow,
   onDeleteOutflow,
   onNavigateToMutations,
   onNavigateToInventory,
@@ -71,6 +80,59 @@ export const OutflowReportsView: React.FC<OutflowReportsViewProps> = ({
   const [deletingOutflow, setDeletingOutflow] = useState<StockTransaction | null>(null);
   const [revertStockOnDelete, setRevertStockOnDelete] = useState<boolean>(true);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+
+  // In-app modal for editing an outflow (Khusus Admin: Input, Edit & Hapus Pengeluaran)
+  const [editingOutflow, setEditingOutflow] = useState<StockTransaction | null>(null);
+  const [editItemId, setEditItemId] = useState<string>('');
+  const [editQuantity, setEditQuantity] = useState<string>('');
+  const [editTimestamp, setEditTimestamp] = useState<string>('');
+  const [editReferenceNo, setEditReferenceNo] = useState<string>('');
+  const [editProject, setEditProject] = useState<string>('');
+  const [editOperator, setEditOperator] = useState<string>('');
+  const [editBatchNo, setEditBatchNo] = useState<string>('');
+  const [editNotes, setEditNotes] = useState<string>('');
+
+  const handleOpenEdit = (trx: StockTransaction) => {
+    setEditingOutflow(trx);
+    setEditItemId(trx.itemId);
+    setEditQuantity(trx.quantity.toString());
+    const d = new Date(trx.timestamp);
+    const tzOffset = d.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+    setEditTimestamp(localISOTime);
+    setEditReferenceNo(trx.referenceNo);
+    setEditProject(trx.projectOrLocation);
+    setEditOperator(trx.operator);
+    setEditBatchNo(trx.batchNo || '');
+    setEditNotes(trx.notes || '');
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOutflow || !onUpdateOutflow) return;
+    const selectedItem = items.find((i) => i.id === editItemId) || itemMap.get(editingOutflow.itemId);
+    const newQty = parseFloat(editQuantity) || 0;
+    if (newQty <= 0) return;
+
+    const updated: StockTransaction = {
+      ...editingOutflow,
+      itemId: selectedItem ? selectedItem.id : editingOutflow.itemId,
+      sku: selectedItem ? selectedItem.sku : editingOutflow.sku,
+      itemName: selectedItem ? selectedItem.name : editingOutflow.itemName,
+      category: selectedItem ? selectedItem.category : editingOutflow.category,
+      unit: selectedItem ? selectedItem.unit : editingOutflow.unit,
+      quantity: newQty,
+      referenceNo: editReferenceNo.trim() || editingOutflow.referenceNo,
+      timestamp: editTimestamp ? new Date(editTimestamp).toISOString() : editingOutflow.timestamp,
+      projectOrLocation: editProject.trim() || editingOutflow.projectOrLocation,
+      operator: editOperator.trim() || editingOutflow.operator,
+      batchNo: editBatchNo.trim() || undefined,
+      notes: editNotes.trim() || undefined,
+    };
+
+    onUpdateOutflow(updated);
+    setEditingOutflow(null);
+  };
 
   // Helper map for item prices & data
   const itemMap = useMemo(() => {
@@ -532,16 +594,25 @@ export const OutflowReportsView: React.FC<OutflowReportsViewProps> = ({
               <span className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 <Receipt className="w-5 h-5" />
               </span>
-              <h2 className="text-xl font-bold text-white tracking-tight">
-                Laporan & Tabel Pengeluaran Barang
-              </h2>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-xl font-bold text-white tracking-tight">
+                    Laporan &amp; Pengeluaran Obat &amp; BBM
+                  </h2>
+                  {currentUser?.role === 'ADMIN' && (
+                    <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[10px] font-bold font-mono">
+                      Wewenang Admin: Input, Edit &amp; Hapus Aktif
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
+                  Pemantauan konsumsi inventaris gudang dan operasional lapangan terintegrasi per{' '}
+                  <strong className="text-amber-400">Hari</strong>,{' '}
+                  <strong className="text-amber-400">Bulan</strong>, dan{' '}
+                  <strong className="text-amber-400">Tahun</strong> lengkap dengan volume komoditas dan estimasi nilai finansial rupiah.
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-slate-400 mt-1.5 max-w-2xl leading-relaxed">
-              Pemantauan konsumsi inventaris gudang dan operasional lapangan terintegrasi per{' '}
-              <strong className="text-amber-400">Hari</strong>,{' '}
-              <strong className="text-amber-400">Bulan</strong>, dan{' '}
-              <strong className="text-amber-400">Tahun</strong> lengkap dengan volume komoditas dan estimasi nilai finansial rupiah.
-            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -565,9 +636,10 @@ export const OutflowReportsView: React.FC<OutflowReportsViewProps> = ({
                 type="button"
                 onClick={onOpenNewOutflow}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all shadow-md cursor-pointer"
+                title="Input Pengeluaran Obat Kimia & BBM Baru"
               >
-                <ArrowUpRight className="w-4 h-4" />
-                Catat Pengeluaran Baru
+                <Plus className="w-4 h-4" />
+                <span>+ Input Pengeluaran Obat &amp; BBM</span>
               </button>
             )}
             <button
@@ -996,6 +1068,16 @@ export const OutflowReportsView: React.FC<OutflowReportsViewProps> = ({
                                 <Printer className="w-3.5 h-3.5" />
                               </button>
                             )}
+                            {onUpdateOutflow && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(trx)}
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 transition-colors cursor-pointer"
+                                title="Edit Pengeluaran Obat / BBM (Khusus Admin)"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             {onNavigateToMutations && (
                               <button
                                 type="button"
@@ -1238,6 +1320,19 @@ export const OutflowReportsView: React.FC<OutflowReportsViewProps> = ({
                                                     <Printer className="w-3.5 h-3.5" />
                                                   </button>
                                                 )}
+                                                {onUpdateOutflow && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleOpenEdit(trx);
+                                                    }}
+                                                    className="p-1 rounded bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 transition-colors cursor-pointer"
+                                                    title="Edit Pengeluaran Obat / BBM (Khusus Admin)"
+                                                  >
+                                                    <Edit2 className="w-3.5 h-3.5" />
+                                                  </button>
+                                                )}
                                                 {onNavigateToMutations && (
                                                   <button
                                                     type="button"
@@ -1443,6 +1538,7 @@ export const OutflowReportsView: React.FC<OutflowReportsViewProps> = ({
                                         <th className="py-2 px-3 text-right">Subtotal</th>
                                         <th className="py-2 px-3">Proyek & Lokasi</th>
                                         <th className="py-2 px-3">Petugas</th>
+                                        <th className="py-2 px-2 text-center">Aksi</th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-800 text-slate-300">
@@ -1473,6 +1569,49 @@ export const OutflowReportsView: React.FC<OutflowReportsViewProps> = ({
                                             </td>
                                             <td className="py-2 px-3 text-[11px] text-slate-400">
                                               {trx.operator}
+                                            </td>
+                                            <td className="py-2 px-2 text-center">
+                                              <div className="flex items-center justify-center gap-1">
+                                                {onPrintSuratJalan && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      onPrintSuratJalan(trx);
+                                                    }}
+                                                    className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-amber-400 transition-colors cursor-pointer"
+                                                    title="Cetak Surat Jalan"
+                                                  >
+                                                    <Printer className="w-3.5 h-3.5" />
+                                                  </button>
+                                                )}
+                                                {onUpdateOutflow && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleOpenEdit(trx);
+                                                    }}
+                                                    className="p-1 rounded bg-slate-800 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 transition-colors cursor-pointer"
+                                                    title="Edit Pengeluaran Obat / BBM (Khusus Admin)"
+                                                  >
+                                                    <Edit2 className="w-3.5 h-3.5" />
+                                                  </button>
+                                                )}
+                                                {onDeleteOutflow && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setDeletingOutflow(trx);
+                                                    }}
+                                                    className="p-1 rounded bg-slate-800 hover:bg-rose-900/50 text-slate-400 hover:text-rose-300 transition-colors cursor-pointer"
+                                                    title="Batalkan / Hapus Pengeluaran & Kembalikan Stok"
+                                                  >
+                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                  </button>
+                                                )}
+                                              </div>
                                             </td>
                                           </tr>
                                         );
@@ -1744,6 +1883,233 @@ export const OutflowReportsView: React.FC<OutflowReportsViewProps> = ({
                 <span>Konfirmasi Hapus Pengeluaran</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL EDIT PENGELUARAN OBAT & BBM (ADMIN) ================= */}
+      {editingOutflow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden my-8 animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-800 bg-slate-950/80">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-white tracking-wide">
+                      Edit Pengeluaran Obat &amp; BBM
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold font-mono">
+                      Khusus Admin
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">
+                    Surat Jalan: {editingOutflow.referenceNo} &bull; ID: {editingOutflow.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingOutflow(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="p-5 space-y-4 text-xs">
+              {/* Barang / Obat / BBM Selector */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Pilih Barang / Obat Kimia / BBM yang Dikeluarkan
+                </label>
+                <select
+                  value={editItemId}
+                  onChange={(e) => setEditItemId(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-medium focus:outline-none focus:border-amber-500"
+                >
+                  {items.map((it) => (
+                    <option key={it.id} value={it.id}>
+                      [{it.category}] {it.name} - Sisa Stok: {it.currentStock} {it.unit}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Live stock calculation preview */}
+              {(() => {
+                const selectedItem = items.find((i) => i.id === editItemId) || itemMap.get(editingOutflow.itemId);
+                const originalQty = editingOutflow.quantity;
+                const newQtyNum = parseFloat(editQuantity) || 0;
+                if (!selectedItem) return null;
+
+                const isSameItem = selectedItem.id === editingOutflow.itemId;
+                const qtyDiff = newQtyNum - originalQty; // positif jika pengeluaran bertambah
+                const projectedStock = isSameItem
+                  ? selectedItem.currentStock - qtyDiff
+                  : selectedItem.currentStock - newQtyNum;
+
+                return (
+                  <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">Dampak Penyesuaian Stok:</span>
+                      <span className="font-mono text-slate-300">
+                        Stok Sekarang: <strong className="text-white">{selectedItem.currentStock} {selectedItem.unit}</strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs font-semibold">
+                      <span className="text-slate-300 flex items-center gap-1.5">
+                        <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                        {isSameItem ? (
+                          qtyDiff > 0 ? (
+                            <span className="text-rose-300">Pengeluaran ditambah {qtyDiff} {selectedItem.unit}</span>
+                          ) : qtyDiff < 0 ? (
+                            <span className="text-emerald-300">Pengeluaran dikurangi {Math.abs(qtyDiff)} {selectedItem.unit}</span>
+                          ) : (
+                            <span className="text-slate-400">Kuantitas pengeluaran tidak berubah</span>
+                          )
+                        ) : (
+                          <span className="text-amber-300">
+                            Barang diganti dari {editingOutflow.itemName} ke {selectedItem.name}
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-mono">
+                        Estimasi Sisa Stok: <strong className={`font-bold ${projectedStock < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>{projectedStock} {selectedItem.unit}</strong>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Grid 1: Kuantitas, Tanggal & Waktu, No. SJ */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Kuantitas Dikeluarkan
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.01"
+                      required
+                      value={editQuantity}
+                      onChange={(e) => setEditQuantity(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-sm font-bold focus:outline-none focus:border-amber-500"
+                    />
+                    <span className="absolute right-3 top-2 text-xs font-mono text-slate-400">
+                      {items.find((i) => i.id === editItemId)?.unit || editingOutflow.unit}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Tanggal &amp; Waktu Pengeluaran
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={editTimestamp}
+                    onChange={(e) => setEditTimestamp(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    No. Surat Jalan / Referensi
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editReferenceNo}
+                    onChange={(e) => setEditReferenceNo(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Grid 2: Proyek/Tujuan & Petugas Lapangan */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Tujuan / Proyek / Lokasi Penggunaan
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editProject}
+                    onChange={(e) => setEditProject(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Petugas Lapangan / Operator Penerima
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editOperator}
+                    onChange={(e) => setEditOperator(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Grid 3: No. Batch & Catatan */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    No. Lot / Batch Produksi (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={editBatchNo}
+                    onChange={(e) => setEditBatchNo(e.target.value)}
+                    placeholder="Contoh: BATCH-FUM-01"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Catatan / Keperluan Pengeluaran
+                  </label>
+                  <input
+                    type="text"
+                    value={editNotes}
+                    onChange={(e) => setEditNotes(e.target.value)}
+                    placeholder="Contoh: Dosis 2 g/m3 untuk Fumigasi Palka"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingOutflow(null)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold cursor-pointer transition-all shadow-md flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Simpan Perubahan &amp; Sesuaikan Stok</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

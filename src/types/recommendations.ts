@@ -3,8 +3,25 @@ export type InfestationLevel = 'RINGAN' | 'SEDANG' | 'BERAT_KRITIS';
 export type RecommendationStatus =
   | 'TERKIRIM' // Terkirim ke Admin & Operator (Menunggu Eksekusi)
   | 'DIPROSES' // Sedang diproses / dibuat SPK oleh Operator
-  | 'SELESAI'  // Selesai difumigasi dan diverifikasi
+  | 'SELESAI'  // Selesai difumigasi/spraying/fogging dan diverifikasi
   | 'DITOLAK'; // Dibatalkan / Tidak Disetujui
+
+export type TreatmentExecutionType = 'FUMIGASI' | 'SPRAYING' | 'FOGGING';
+
+export interface TreatmentExecutionRecord {
+  treatmentType: TreatmentExecutionType; // 'FUMIGASI' | 'SPRAYING' | 'FOGGING'
+  executionDate: string; // Tanggal pengerjaan (YYYY-MM-DD)
+  usedMedicineId?: string;
+  usedMedicineName: string; // Obat yang digunakan
+  usedMedicineQuantity?: number;
+  usedMedicineUnit?: string;
+  warehouseLocation: string; // Gudang / Silo / Lokasi penyimpanan bahan baku
+  treatedTonnage: number; // Jumlah tonase bahan baku yang dikerjakan
+  tonnageUnit: string; // Ton (default) atau Karung, Pallet, dll
+  executedBy: string; // Operator / teknisi yang mengerjakan
+  executionNotes?: string;
+  completedAt: string; // ISO timestamp
+}
 
 export interface RawMaterialRecommendation {
   id: string;
@@ -23,6 +40,7 @@ export interface RawMaterialRecommendation {
   targetFumigationDeadline: string; // YYYY-MM-DD (Batas waktu eksekusi sebelum hama meluas)
 
   // Rekomendasi Teknis Bahan & Dosis dari QC
+  recommendedTreatmentType?: 'FUMIGASI' | 'SPRAYING_FOGGING' | 'KOMBINASI'; // Perintah perlakuan dari QC
   recommendedMedicineId?: string;
   recommendedMedicineName: string; // e.g. "Fumiphos 56 TB (Aluminium Phosphide)", "Methyl Bromide 98%"
   recommendedDosage: string; // e.g. "3 tablet per Ton (Target konsentrasi gas 500 ppm)"
@@ -45,4 +63,7 @@ export interface RawMaterialRecommendation {
   processedByOperator?: string;
   processedAt?: string;
   adminNotes?: string;
+
+  // Catatan Pelaksanaan: Sudah dilakukan Fumigasi/Spraying/Fogging
+  treatmentExecutionRecord?: TreatmentExecutionRecord;
 }

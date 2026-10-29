@@ -287,14 +287,22 @@ export const AdminCrossCheckView: React.FC<AdminCrossCheckViewProps> = ({
                   <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800 space-y-1.5">
                     <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
                       <FileCheck2 className="w-3.5 h-3.5 text-purple-400" />
-                      <span>Input Pemakaian Bahan di SPK:</span>
+                      <span>Data Utama SPK Fumigasi:</span>
                     </div>
                     <div className="text-slate-200">
-                      <strong>Obat:</strong> {job.medicineName} &bull;{' '}
+                      <strong>Bahan Baku:</strong> <span className="text-white font-medium">{job.rawMaterialName || job.targetObject}</span>
+                    </div>
+                    <div className="text-slate-300 font-mono text-[11px]">
+                      <span>Tutup: <strong className="text-blue-300">{job.closingDate || job.executionDate}</strong></span>
+                      <span className="mx-1.5 text-slate-500">&bull;</span>
+                      <span>Buka: <strong className="text-amber-300">{job.openingDate || job.aerationDate || '-'}</strong></span>
+                    </div>
+                    <div className="text-slate-200">
+                      <strong>Jumlah Obat:</strong>{' '}
                       <span className="text-rose-400 font-mono font-bold">
                         {formatNumberID(job.medicineQuantity)} {job.medicineUnit}
                       </span>{' '}
-                      {job.medicineBatchNo && <span className="text-slate-500">({job.medicineBatchNo})</span>}
+                      ({job.medicineName}) {job.medicineBatchNo && <span className="text-slate-500">[{job.medicineBatchNo}]</span>}
                     </div>
                     {job.fuelName && (
                       <div className="text-slate-200">

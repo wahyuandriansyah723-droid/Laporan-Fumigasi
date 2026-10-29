@@ -20,6 +20,7 @@ export interface UserPermissions {
 export interface AuthUser {
   id: string;
   username: string;
+  password?: string;
   name: string;
   role: UserRole;
   roleTitle: string;

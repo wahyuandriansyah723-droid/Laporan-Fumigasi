@@ -24,7 +24,7 @@ interface TransactionModalProps {
   settings?: SystemSettings;
   currentUserName?: string;
   currentUser?: AuthUser | null;
-  onSaveTransaction: (trxData: Omit<StockTransaction, 'id' | 'timestamp'>) => void;
+  onSaveTransaction: (trxData: Omit<StockTransaction, 'id' | 'timestamp'> & { timestamp?: string }) => void;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
@@ -42,6 +42,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onSaveTransaction,
 }) => {
   const isOperator = currentUser?.role === 'OPERATOR';
+  const getTodayISOString = () => {
+    const d = new Date();
+    const tzOffset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+  };
+  const [transactionDateTime, setTransactionDateTime] = useState<string>(getTodayISOString);
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [trxType, setTrxType] = useState<TransactionType>(isOperator ? 'OUT' : defaultType);
   const [quantity, setQuantity] = useState<string>('');
@@ -128,6 +134,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       operator: operator.trim() || 'Petugas Gudang',
       batchNo: batchNo.trim() || undefined,
       notes: notes.trim() || undefined,
+      timestamp: transactionDateTime ? new Date(transactionDateTime).toISOString() : undefined,
     });
 
     onClose();
@@ -292,8 +299,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
-          {/* Quantity & Unit */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Quantity, Date/Time & Reference */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
                 Jumlah Mutasi ({currentItem?.unit || 'Unit'})
@@ -316,14 +323,27 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               {isOutOfStock && (
                 <p className="mt-1 text-xs text-rose-400 flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  Stok tidak mencukupi! Maksimal pengeluaran: {currentItem?.currentStock} {currentItem?.unit}
+                  Stok tidak mencukupi!
                 </p>
               )}
             </div>
 
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
-                No. Referensi / No. Surat Jalan / SPK
+                Tanggal &amp; Waktu Transaksi
+              </label>
+              <input
+                type="datetime-local"
+                required
+                value={transactionDateTime}
+                onChange={(e) => setTransactionDateTime(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                No. Referensi / Surat Jalan
               </label>
               <input
                 type="text"

@@ -223,7 +223,7 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
 
           {/* Logout Action */}
           <div className="pt-2 border-t border-slate-800 space-y-1.5">
-            {onOpenLoginDashboard && (
+            {onOpenLoginDashboard && currentUser.role === 'ADMIN' && (
               <button
                 type="button"
                 onClick={() => {
@@ -233,7 +233,7 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
                 className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-colors cursor-pointer"
               >
                 <KeyRound className="w-3.5 h-3.5 text-amber-400" />
-                <span>Buka Dasbor Login &amp; Portal</span>
+                <span>Kelola ID, Password &amp; Akun</span>
               </button>
             )}
 

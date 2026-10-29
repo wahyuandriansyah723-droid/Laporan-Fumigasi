@@ -1,6 +1,6 @@
 export type JobType = 'FUMIGASI' | 'SPRAYING_FOGGING';
 
-export type QCRecommendation = 'OK' | 'BELUM_OK' | 'FUMIGASI_ULANG' | 'PENDING';
+export type QCRecommendation = 'OK' | 'BELUM_OK' | 'FUMIGASI_ULANG' | 'SPRAYING_ULANG' | 'PENDING';
 
 export type QCApprovalStatus = 'APPROVED' | 'PENDING' | 'REJECTED';
 
@@ -11,6 +11,12 @@ export interface FumigationJobReport {
   title: string;
   clientName: string;
   location: string;
+
+  // DATA UTAMA LAPORAN FUMIGASI:
+  rawMaterialName: string; // NAMA BAHAN BAKU (e.g. Beras Ramos, Jagung Pipil, Biji Kopi, Pallet Kayu ISPM-15, dll)
+  closingDate: string; // TANGGAL TUTUP (Tanggal Sungkup / Tutup Terpal / Mulai Fumigasi)
+  openingDate: string; // TANGGAL BUKA (Tanggal Buka Sungkup / Buka Terpal / Aerasi Gas)
+
   targetObject: string; // e.g. "Palka Kapal MV Samudera Perkasa 02 (4.500 Ton Beras)", "Silo Jagung"
   targetPest?: string; // e.g. "Sitophilus oryzae, Tribolium castaneum"
   executionDate: string; // YYYY-MM-DD

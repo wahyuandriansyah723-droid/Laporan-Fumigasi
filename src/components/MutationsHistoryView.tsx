@@ -46,6 +46,8 @@ export const MutationsHistoryView: React.FC<MutationsHistoryViewProps> = ({
   // Edit Transaction State
   const [editingTrx, setEditingTrx] = useState<StockTransaction | null>(null);
   const [editRefNo, setEditRefNo] = useState('');
+  const [editQuantity, setEditQuantity] = useState('');
+  const [editTimestamp, setEditTimestamp] = useState('');
   const [editOperator, setEditOperator] = useState('');
   const [editProject, setEditProject] = useState('');
   const [editNotes, setEditNotes] = useState('');
@@ -61,6 +63,11 @@ export const MutationsHistoryView: React.FC<MutationsHistoryViewProps> = ({
   const handleOpenEdit = (trx: StockTransaction) => {
     setEditingTrx(trx);
     setEditRefNo(trx.referenceNo);
+    setEditQuantity(trx.quantity.toString());
+    const d = new Date(trx.timestamp);
+    const tzOffset = d.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+    setEditTimestamp(localISOTime);
     setEditOperator(trx.operator);
     setEditProject(trx.projectOrLocation);
     setEditNotes(trx.notes || '');
@@ -70,8 +77,11 @@ export const MutationsHistoryView: React.FC<MutationsHistoryViewProps> = ({
     e.preventDefault();
     if (!editingTrx || !onUpdateTransaction) return;
 
+    const newQty = parseFloat(editQuantity) || editingTrx.quantity;
     const updated: StockTransaction = {
       ...editingTrx,
+      quantity: newQty,
+      timestamp: editTimestamp ? new Date(editTimestamp).toISOString() : editingTrx.timestamp,
       referenceNo: editRefNo.trim() || editingTrx.referenceNo,
       operator: editOperator.trim() || editingTrx.operator,
       projectOrLocation: editProject.trim() || editingTrx.projectOrLocation,
@@ -466,6 +476,36 @@ export const MutationsHistoryView: React.FC<MutationsHistoryViewProps> = ({
                 <div className="flex justify-between">
                   <span className="text-slate-400">Waktu Mutasi:</span>
                   <span className="text-slate-300">{formatDateTimeIndo(editingTrx.timestamp)}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Kuantitas / Jumlah ({editingTrx.unit})
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.01"
+                    required
+                    value={editQuantity}
+                    onChange={(e) => setEditQuantity(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 font-mono text-white text-sm font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-medium mb-1">
+                    Tanggal &amp; Waktu Transaksi
+                  </label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={editTimestamp}
+                    onChange={(e) => setEditTimestamp(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 font-mono text-white text-xs focus:outline-none focus:border-amber-500"
+                  />
                 </div>
               </div>
 
