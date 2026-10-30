@@ -91,20 +91,31 @@ import {
 } from 'lucide-react';
 import { isBelowMinimumThreshold, isCriticallyBelowThreshold } from './utils/stockUtils';
 
-const STORAGE_KEY_AUTH_USER = 'logix_warehouse_auth_user_v1';
-const STORAGE_KEY_ITEMS = 'logix_warehouse_items_v1';
-const STORAGE_KEY_TRX = 'logix_warehouse_transactions_v1';
-const STORAGE_KEY_SUPPLIERS = 'logix_warehouse_suppliers_v1';
-const STORAGE_KEY_LOCATIONS = 'logix_warehouse_locations_v1';
-const STORAGE_KEY_OPERATORS = 'logix_warehouse_operators_v1';
-const STORAGE_KEY_DESTINATIONS = 'logix_warehouse_destinations_v1';
-const STORAGE_KEY_UNITS = 'logix_warehouse_units_v1';
-const STORAGE_KEY_MEDICINES = 'logix_warehouse_medicines_v1';
-const STORAGE_KEY_FUELS = 'logix_warehouse_fuels_v1';
-const STORAGE_KEY_EQUIPMENT = 'logix_warehouse_equipment_v1';
-const STORAGE_KEY_SETTINGS = 'logix_warehouse_settings_v1';
-const STORAGE_KEY_JOB_REPORTS = 'logix_warehouse_job_reports_v1';
-const STORAGE_KEY_RAW_RECOMMENDATIONS = 'logix_warehouse_raw_recommendations_v1';
+import {
+  subscribeInventoryItems,
+  saveInventoryItem,
+  deleteInventoryItem,
+  subscribeStockTransactions,
+  saveStockTransaction,
+  deleteStockTransaction,
+  deleteAllStockTransactions,
+  subscribeJobReports,
+  saveJobReport,
+  deleteJobReport,
+  subscribeRawRecommendations,
+  saveRawRecommendation,
+  deleteRawRecommendation,
+  subscribeAuthUsers,
+  saveAuthUser,
+  deleteAuthUser,
+  subscribeMasterCollection,
+  saveMasterDocument,
+  deleteMasterDocument,
+  subscribeSystemSettings,
+  saveSystemSettings,
+  seedDatabaseIfEmpty,
+  COLLECTIONS,
+} from './firebase/firestoreService';
 
 export default function App() {
   // Authentication State: Sesuai permintaan pengguna, saat awal masuk link atau membuka program selalu kembali ke tampilan login
@@ -112,254 +123,87 @@ export default function App() {
 
   const [isQCModalOpen, setIsQCModalOpen] = useState(false);
 
-  // Persistent state for items
-  const [items, setItems] = useState<InventoryItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_ITEMS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load items from storage:', e);
-    }
-    return INITIAL_ITEMS;
-  });
+  // Real-time synced states from Firebase Firestore
+  const [items, setItems] = useState<InventoryItem[]>(INITIAL_ITEMS);
+  const [transactions, setTransactions] = useState<StockTransaction[]>(INITIAL_TRANSACTIONS);
+  const [suppliers, setSuppliers] = useState<MasterSupplier[]>(INITIAL_SUPPLIERS);
+  const [locations, setLocations] = useState<MasterLocation[]>(INITIAL_LOCATIONS);
+  const [operators, setOperators] = useState<MasterOperator[]>(INITIAL_OPERATORS);
+  const [destinations, setDestinations] = useState<MasterProjectDestination[]>(INITIAL_PROJECT_DESTINATIONS);
+  const [units, setUnits] = useState<MasterUnit[]>(INITIAL_UNITS);
+  const [medicines, setMedicines] = useState<MasterChemicalMedicine[]>(INITIAL_CHEMICAL_MEDICINES);
+  const [fuels, setFuels] = useState<MasterFuelType[]>(INITIAL_FUEL_TYPES);
+  const [equipment, setEquipment] = useState<MasterEquipmentInventory[]>(INITIAL_EQUIPMENT_INVENTORY);
+  const [settings, setSettings] = useState<SystemSettings>(INITIAL_SYSTEM_SETTINGS);
+  const [jobReports, setJobReports] = useState<FumigationJobReport[]>(INITIAL_JOB_REPORTS);
+  const [rawRecommendations, setRawRecommendations] = useState<RawMaterialRecommendation[]>(INITIAL_RAW_RECOMMENDATIONS);
+  const [authUsers, setAuthUsers] = useState<AuthUser[]>(INITIAL_AUTH_USERS);
 
-  // Persistent state for transactions
-  const [transactions, setTransactions] = useState<StockTransaction[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_TRX);
-      if (saved !== null) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load transactions from storage:', e);
-    }
-    return INITIAL_TRANSACTIONS;
-  });
-
-  // Persistent state for Master Data & Settings
-  const [suppliers, setSuppliers] = useState<MasterSupplier[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_SUPPLIERS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load suppliers:', e);
-    }
-    return INITIAL_SUPPLIERS;
-  });
-
-  const [locations, setLocations] = useState<MasterLocation[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_LOCATIONS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load locations:', e);
-    }
-    return INITIAL_LOCATIONS;
-  });
-
-  const [operators, setOperators] = useState<MasterOperator[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_OPERATORS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load operators:', e);
-    }
-    return INITIAL_OPERATORS;
-  });
-
-  const [destinations, setDestinations] = useState<MasterProjectDestination[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_DESTINATIONS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load destinations:', e);
-    }
-    return INITIAL_PROJECT_DESTINATIONS;
-  });
-
-  const [units, setUnits] = useState<MasterUnit[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_UNITS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load units:', e);
-    }
-    return INITIAL_UNITS;
-  });
-
-  const [medicines, setMedicines] = useState<MasterChemicalMedicine[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_MEDICINES);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load medicines:', e);
-    }
-    return INITIAL_CHEMICAL_MEDICINES;
-  });
-
-  const [fuels, setFuels] = useState<MasterFuelType[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_FUELS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load fuels:', e);
-    }
-    return INITIAL_FUEL_TYPES;
-  });
-
-  const [equipment, setEquipment] = useState<MasterEquipmentInventory[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_EQUIPMENT);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load equipment:', e);
-    }
-    return INITIAL_EQUIPMENT_INVENTORY;
-  });
-
-  const [settings, setSettings] = useState<SystemSettings>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.companyName) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load settings:', e);
-    }
-    return INITIAL_SYSTEM_SETTINGS;
-  });
-
-  // Sync to localStorage
+  // Initialize and seed Firestore if empty, and subscribe to real-time listeners for all devices (HP, Laptop, PC)
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
-    } catch (e) {
-      console.error('Failed to save items:', e);
-    }
-  }, [items]);
+    seedDatabaseIfEmpty();
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_TRX, JSON.stringify(transactions));
-    } catch (e) {
-      console.error('Failed to save transactions:', e);
-    }
-  }, [transactions]);
+    const unsubItems = subscribeInventoryItems((data) => {
+      if (data && data.length > 0) setItems(data);
+    });
+    const unsubTrx = subscribeStockTransactions((data) => {
+      setTransactions(data);
+    });
+    const unsubJobs = subscribeJobReports((data) => {
+      if (data && data.length > 0) setJobReports(data);
+    });
+    const unsubRecs = subscribeRawRecommendations((data) => {
+      if (data && data.length > 0) setRawRecommendations(data);
+    });
+    const unsubUsers = subscribeAuthUsers((data) => {
+      if (data && data.length > 0) setAuthUsers(data);
+    });
+    const unsubSettings = subscribeSystemSettings((data) => {
+      if (data && data.companyName) setSettings(data);
+    });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_SUPPLIERS, JSON.stringify(suppliers));
-    } catch (e) {
-      console.error('Failed to save suppliers:', e);
-    }
-  }, [suppliers]);
+    const unsubSuppliers = subscribeMasterCollection<MasterSupplier>(COLLECTIONS.SUPPLIERS, (data) => {
+      if (data && data.length > 0) setSuppliers(data);
+    });
+    const unsubLocations = subscribeMasterCollection<MasterLocation>(COLLECTIONS.LOCATIONS, (data) => {
+      if (data && data.length > 0) setLocations(data);
+    });
+    const unsubOperators = subscribeMasterCollection<MasterOperator>(COLLECTIONS.OPERATORS, (data) => {
+      if (data && data.length > 0) setOperators(data);
+    });
+    const unsubDestinations = subscribeMasterCollection<MasterProjectDestination>(COLLECTIONS.DESTINATIONS, (data) => {
+      if (data && data.length > 0) setDestinations(data);
+    });
+    const unsubUnits = subscribeMasterCollection<MasterUnit>(COLLECTIONS.UNITS, (data) => {
+      if (data && data.length > 0) setUnits(data);
+    });
+    const unsubMedicines = subscribeMasterCollection<MasterChemicalMedicine>(COLLECTIONS.MEDICINES, (data) => {
+      if (data && data.length > 0) setMedicines(data);
+    });
+    const unsubFuels = subscribeMasterCollection<MasterFuelType>(COLLECTIONS.FUELS, (data) => {
+      if (data && data.length > 0) setFuels(data);
+    });
+    const unsubEquipment = subscribeMasterCollection<MasterEquipmentInventory>(COLLECTIONS.EQUIPMENT, (data) => {
+      if (data && data.length > 0) setEquipment(data);
+    });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_LOCATIONS, JSON.stringify(locations));
-    } catch (e) {
-      console.error('Failed to save locations:', e);
-    }
-  }, [locations]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_OPERATORS, JSON.stringify(operators));
-    } catch (e) {
-      console.error('Failed to save operators:', e);
-    }
-  }, [operators]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_DESTINATIONS, JSON.stringify(destinations));
-    } catch (e) {
-      console.error('Failed to save destinations:', e);
-    }
-  }, [destinations]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(units));
-    } catch (e) {
-      console.error('Failed to save units:', e);
-    }
-  }, [units]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_MEDICINES, JSON.stringify(medicines));
-    } catch (e) {
-      console.error('Failed to save medicines:', e);
-    }
-  }, [medicines]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_FUELS, JSON.stringify(fuels));
-    } catch (e) {
-      console.error('Failed to save fuels:', e);
-    }
-  }, [fuels]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_EQUIPMENT, JSON.stringify(equipment));
-    } catch (e) {
-      console.error('Failed to save equipment:', e);
-    }
-  }, [equipment]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-    } catch (e) {
-      console.error('Failed to save settings:', e);
-    }
-  }, [settings]);
-
-  useEffect(() => {
-    try {
-      // Pastikan sesi selalu kembali ke tampilan login saat masuk link atau program baru
-      localStorage.removeItem(STORAGE_KEY_AUTH_USER);
-    } catch (e) {
-      console.error('Failed to clear auth user session:', e);
-    }
-  }, [currentUser]);
-
-  // Persistent state for authenticated users (Admin can add, edit, and delete accounts)
-  const [authUsers, setAuthUsers] = useState<AuthUser[]>(() => loadStoredAuthUsers());
+    return () => {
+      unsubItems();
+      unsubTrx();
+      unsubJobs();
+      unsubRecs();
+      unsubUsers();
+      unsubSettings();
+      unsubSuppliers();
+      unsubLocations();
+      unsubOperators();
+      unsubDestinations();
+      unsubUnits();
+      unsubMedicines();
+      unsubFuels();
+      unsubEquipment();
+    };
+  }, []);
 
   // Current view tabs:
   type AppTab =
@@ -400,50 +244,6 @@ export default function App() {
       }
     }
   }, [currentUser, currentTab]);
-
-  // Persistent state for Fumigation & Spraying Job Reports
-  const [jobReports, setJobReports] = useState<FumigationJobReport[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_JOB_REPORTS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load job reports:', e);
-    }
-    return INITIAL_JOB_REPORTS;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_JOB_REPORTS, JSON.stringify(jobReports));
-    } catch (e) {
-      console.error('Failed to save job reports:', e);
-    }
-  }, [jobReports]);
-
-  // Persistent state for Raw Material Recommendations (QC -> Operator & Admin)
-  const [rawRecommendations, setRawRecommendations] = useState<RawMaterialRecommendation[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_RAW_RECOMMENDATIONS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch (e) {
-      console.error('Failed to load raw recommendations:', e);
-    }
-    return INITIAL_RAW_RECOMMENDATIONS;
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_RAW_RECOMMENDATIONS, JSON.stringify(rawRecommendations));
-    } catch (e) {
-      console.error('Failed to save raw recommendations:', e);
-    }
-  }, [rawRecommendations]);
 
   const [isRawRecModalOpen, setIsRawRecModalOpen] = useState(false);
   const [rawRecInitialType, setRawRecInitialType] = useState<'FUMIGASI' | 'SPRAYING_FOGGING'>('FUMIGASI');
@@ -521,7 +321,7 @@ export default function App() {
   };
 
   // Handler: Commit Transaction (Input Pengeluaran / Penerimaan)
-  const handleSaveTransaction = (trxData: Omit<StockTransaction, 'id' | 'timestamp'> & { timestamp?: string }) => {
+  const handleSaveTransaction = async (trxData: Omit<StockTransaction, 'id' | 'timestamp'> & { timestamp?: string }) => {
     const newTrx: StockTransaction = {
       ...trxData,
       operator: trxData.operator || (currentUser ? currentUser.name : 'Petugas Gudang'),
@@ -529,22 +329,17 @@ export default function App() {
       timestamp: trxData.timestamp || new Date().toISOString(),
     };
 
-    // Update item stock
-    setItems((prevItems) =>
-      prevItems.map((item) => {
-        if (item.id === trxData.itemId) {
-          return {
-            ...item,
-            currentStock: trxData.newStock,
-            lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
-          };
-        }
-        return item;
-      })
-    );
-
-    // Append to transactions
-    setTransactions((prev) => [newTrx, ...prev]);
+    // Update item stock in state & Firestore
+    const targetItem = items.find((item) => item.id === trxData.itemId);
+    if (targetItem) {
+      const updatedItem: InventoryItem = {
+        ...targetItem,
+        currentStock: trxData.newStock,
+        lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      };
+      await saveInventoryItem(updatedItem);
+    }
+    await saveStockTransaction(newTrx);
 
     showToast(
       `Berhasil mencatat mutasi: [${trxData.type}] ${trxData.itemName} (${trxData.quantity} ${trxData.unit})`
@@ -558,94 +353,80 @@ export default function App() {
   };
 
   // Handler: Update Existing Transaction (Edit Mutasi & Pengeluaran dengan Penyesuaian Stok Otomatis)
-  const handleUpdateTransaction = (updatedTrx: StockTransaction) => {
+  const handleUpdateTransaction = async (updatedTrx: StockTransaction) => {
     const oldTrx = transactions.find((t) => t.id === updatedTrx.id);
 
     if (oldTrx) {
       // Re-calculate inventory stock if quantity or itemId changed
-      setItems((prevItems) => {
-        let newItems = [...prevItems];
-
-        if (oldTrx.itemId === updatedTrx.itemId) {
-          const qtyDiff = updatedTrx.quantity - oldTrx.quantity;
-          if (qtyDiff !== 0) {
-            newItems = newItems.map((item) => {
-              if (item.id === updatedTrx.itemId) {
-                let adjusted = item.currentStock;
-                if (updatedTrx.type === 'OUT') {
-                  // Outflow changed: jika keluar bertambah, stok berkurang; jika keluar berkurang, stok bertambah
-                  adjusted = Math.max(0, item.currentStock - qtyDiff);
-                } else if (updatedTrx.type === 'IN') {
-                  adjusted = Math.max(0, item.currentStock + qtyDiff);
-                } else if (updatedTrx.type === 'ADJUSTMENT') {
-                  adjusted = updatedTrx.quantity;
-                }
-                return {
-                  ...item,
-                  currentStock: adjusted,
-                  lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
-                };
-              }
-              return item;
+      if (oldTrx.itemId === updatedTrx.itemId) {
+        const qtyDiff = updatedTrx.quantity - oldTrx.quantity;
+        if (qtyDiff !== 0) {
+          const item = items.find((i) => i.id === updatedTrx.itemId);
+          if (item) {
+            let adjusted = item.currentStock;
+            if (updatedTrx.type === 'OUT') {
+              adjusted = Math.max(0, item.currentStock - qtyDiff);
+            } else if (updatedTrx.type === 'IN') {
+              adjusted = Math.max(0, item.currentStock + qtyDiff);
+            } else if (updatedTrx.type === 'ADJUSTMENT') {
+              adjusted = updatedTrx.quantity;
+            }
+            await saveInventoryItem({
+              ...item,
+              currentStock: adjusted,
+              lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
             });
           }
-        } else {
-          // Item changed: revert old item stock, apply to new item stock
-          newItems = newItems.map((item) => {
-            if (item.id === oldTrx.itemId) {
-              const revertedStock =
-                oldTrx.type === 'OUT'
-                  ? item.currentStock + oldTrx.quantity
-                  : Math.max(0, item.currentStock - oldTrx.quantity);
-              return { ...item, currentStock: revertedStock };
-            }
-            if (item.id === updatedTrx.itemId) {
-              const adjustedStock =
-                updatedTrx.type === 'OUT'
-                  ? Math.max(0, item.currentStock - updatedTrx.quantity)
-                  : item.currentStock + updatedTrx.quantity;
-              return { ...item, currentStock: adjustedStock };
-            }
-            return item;
-          });
         }
-        return newItems;
-      });
+      } else {
+        const oldItem = items.find((i) => i.id === oldTrx.itemId);
+        if (oldItem) {
+          const revertedStock =
+            oldTrx.type === 'OUT'
+              ? oldItem.currentStock + oldTrx.quantity
+              : Math.max(0, oldItem.currentStock - oldTrx.quantity);
+          await saveInventoryItem({ ...oldItem, currentStock: revertedStock });
+        }
+        const newItem = items.find((i) => i.id === updatedTrx.itemId);
+        if (newItem) {
+          const adjustedStock =
+            updatedTrx.type === 'OUT'
+              ? Math.max(0, newItem.currentStock - updatedTrx.quantity)
+              : newItem.currentStock + updatedTrx.quantity;
+          await saveInventoryItem({ ...newItem, currentStock: adjustedStock });
+        }
+      }
     }
 
-    setTransactions((prev) => prev.map((t) => (t.id === updatedTrx.id ? updatedTrx : t)));
-    showToast(`Pengeluaran / Mutasi ${updatedTrx.referenceNo} berhasil diperbarui & stok disinkronkan.`);
+    await saveStockTransaction(updatedTrx);
+    showToast(`Pengeluaran / Mutasi ${updatedTrx.referenceNo} berhasil diperbarui & disinkronkan ke cloud.`);
   };
 
   // Handler: Delete Transaction with Optional Stock Reversion
-  const handleDeleteTransaction = (trxId: string, revertStock: boolean) => {
+  const handleDeleteTransaction = async (trxId: string, revertStock: boolean) => {
     const targetTrx = transactions.find((t) => t.id === trxId);
     if (!targetTrx) return;
 
     if (revertStock) {
-      setItems((prevItems) =>
-        prevItems.map((item) => {
-          if (item.id === targetTrx.itemId) {
-            let adjustedStock = item.currentStock;
-            if (targetTrx.type === 'IN') {
-              adjustedStock = Math.max(0, item.currentStock - targetTrx.quantity);
-            } else if (targetTrx.type === 'OUT') {
-              adjustedStock = item.currentStock + targetTrx.quantity;
-            } else if (targetTrx.type === 'ADJUSTMENT') {
-              adjustedStock = targetTrx.previousStock;
-            }
-            return {
-              ...item,
-              currentStock: adjustedStock,
-              lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
-            };
-          }
-          return item;
-        })
-      );
+      const item = items.find((i) => i.id === targetTrx.itemId);
+      if (item) {
+        let adjustedStock = item.currentStock;
+        if (targetTrx.type === 'IN') {
+          adjustedStock = Math.max(0, item.currentStock - targetTrx.quantity);
+        } else if (targetTrx.type === 'OUT') {
+          adjustedStock = item.currentStock + targetTrx.quantity;
+        } else if (targetTrx.type === 'ADJUSTMENT') {
+          adjustedStock = targetTrx.previousStock;
+        }
+        await saveInventoryItem({
+          ...item,
+          currentStock: adjustedStock,
+          lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
+        });
+      }
     }
 
-    setTransactions((prev) => prev.filter((t) => t.id !== trxId));
+    await deleteStockTransaction(trxId);
     showToast(
       revertStock
         ? `Mutasi ${targetTrx.referenceNo} dihapus & stok barang dikembalikan.`
@@ -654,47 +435,45 @@ export default function App() {
   };
 
   // Handler: Delete All Transactions (Hapus Semua Mutasi)
-  const handleDeleteAllTransactions = (revertStock: boolean) => {
+  const handleDeleteAllTransactions = async (revertStock: boolean) => {
     const totalCount = transactions.length;
     if (totalCount === 0) return;
 
     if (revertStock) {
-      setItems((prevItems) => {
-        const itemStockMap = new Map<string, number>();
-        prevItems.forEach((i) => itemStockMap.set(i.id, i.currentStock));
+      const itemStockMap = new Map<string, number>();
+      items.forEach((i) => itemStockMap.set(i.id, i.currentStock));
 
-        // Walk transactions in reverse chronological order (newest to oldest)
-        const sortedTrx = [...transactions].sort(
-          (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        );
+      // Walk transactions in reverse chronological order (newest to oldest)
+      const sortedTrx = [...transactions].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
 
-        sortedTrx.forEach((trx) => {
-          const cur = itemStockMap.get(trx.itemId);
-          if (cur !== undefined) {
-            if (trx.type === 'IN') {
-              itemStockMap.set(trx.itemId, Math.max(0, cur - trx.quantity));
-            } else if (trx.type === 'OUT') {
-              itemStockMap.set(trx.itemId, cur + trx.quantity);
-            } else if (trx.type === 'ADJUSTMENT') {
-              itemStockMap.set(trx.itemId, trx.previousStock);
-            }
+      sortedTrx.forEach((trx) => {
+        const cur = itemStockMap.get(trx.itemId);
+        if (cur !== undefined) {
+          if (trx.type === 'IN') {
+            itemStockMap.set(trx.itemId, Math.max(0, cur - trx.quantity));
+          } else if (trx.type === 'OUT') {
+            itemStockMap.set(trx.itemId, cur + trx.quantity);
+          } else if (trx.type === 'ADJUSTMENT') {
+            itemStockMap.set(trx.itemId, trx.previousStock);
           }
-        });
-
-        return prevItems.map((item) => {
-          const reverted = itemStockMap.get(item.id);
-          return reverted !== undefined
-            ? {
-                ...item,
-                currentStock: reverted,
-                lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
-              }
-            : item;
-        });
+        }
       });
+
+      for (const item of items) {
+        const reverted = itemStockMap.get(item.id);
+        if (reverted !== undefined) {
+          await saveInventoryItem({
+            ...item,
+            currentStock: reverted,
+            lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
+          });
+        }
+      }
     }
 
-    setTransactions([]);
+    await deleteAllStockTransactions();
     showToast(
       revertStock
         ? `Seluruh riwayat mutasi (${totalCount} transaksi) berhasil dihapus & stok barang dikembalikan.`
@@ -703,32 +482,33 @@ export default function App() {
   };
 
   // Handler: Reload Sample Transactions
-  const handleReloadSampleTransactions = () => {
-    setTransactions(INITIAL_TRANSACTIONS);
-    showToast(`Data sampel riwayat mutasi (${INITIAL_TRANSACTIONS.length} transaksi) berhasil dimuat kembali.`);
+  const handleReloadSampleTransactions = async () => {
+    for (const trx of INITIAL_TRANSACTIONS) {
+      await saveStockTransaction(trx);
+    }
+    showToast(`Data sampel riwayat mutasi (${INITIAL_TRANSACTIONS.length} transaksi) berhasil dimuat kembali ke Firestore.`);
   };
 
   // Handler: Add or Edit Item
-  const handleSaveItem = (itemToSave: InventoryItem) => {
+  const handleSaveItem = async (itemToSave: InventoryItem) => {
+    await saveInventoryItem(itemToSave);
     const exists = items.some((i) => i.id === itemToSave.id);
-    if (exists) {
-      setItems((prev) => prev.map((i) => (i.id === itemToSave.id ? itemToSave : i)));
-      showToast(`Data barang "${itemToSave.name}" berhasil diperbarui.`);
-    } else {
-      setItems((prev) => [itemToSave, ...prev]);
-      showToast(`Barang baru "${itemToSave.name}" berhasil ditambahkan.`);
-    }
+    showToast(
+      exists
+        ? `Data barang "${itemToSave.name}" berhasil diperbarui di cloud.`
+        : `Barang baru "${itemToSave.name}" berhasil ditambahkan ke cloud.`
+    );
     setItemToEdit(null);
   };
 
   // Handler: Delete Item
-  const handleDeleteItem = (itemId: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== itemId));
+  const handleDeleteItem = async (itemId: string) => {
+    await deleteInventoryItem(itemId);
     showToast('Barang berhasil dihapus dari inventaris gudang.');
   };
 
   // Handler: Apply Stock Opname Adjustments
-  const handleApplyOpname = (
+  const handleApplyOpname = async (
     adjustments: {
       item: InventoryItem;
       physicalStock: number;
@@ -736,45 +516,38 @@ export default function App() {
       notes: string;
     }[]
   ) => {
-    const newTrxList: StockTransaction[] = [];
     const dateStr = new Date().toISOString();
 
-    setItems((prevItems) => {
-      const updated = [...prevItems];
-      adjustments.forEach((adj) => {
-        const idx = updated.findIndex((i) => i.id === adj.item.id);
-        if (idx !== -1) {
-          const prevStock = updated[idx].currentStock;
-          updated[idx] = {
-            ...updated[idx],
-            currentStock: adj.physicalStock,
-            lastUpdated: dateStr.replace('T', ' ').slice(0, 16),
-          };
+    for (const adj of adjustments) {
+      const prevStock = adj.item.currentStock;
+      const updatedItem: InventoryItem = {
+        ...adj.item,
+        currentStock: adj.physicalStock,
+        lastUpdated: dateStr.replace('T', ' ').slice(0, 16),
+      };
+      await saveInventoryItem(updatedItem);
 
-          newTrxList.push({
-            id: `trx-so-${Date.now()}-${adj.item.id}`,
-            timestamp: dateStr,
-            type: 'ADJUSTMENT',
-            itemId: adj.item.id,
-            sku: adj.item.sku,
-            itemName: adj.item.name,
-            category: adj.item.category,
-            quantity: Math.abs(adj.difference),
-            unit: adj.item.unit,
-            previousStock: prevStock,
-            newStock: adj.physicalStock,
-            referenceNo: `SO-AUDIT-${new Date().toISOString().slice(0, 10)}`,
-            projectOrLocation: 'Penyesuaian Fisik Stock Opname',
-            operator: currentUser ? `${currentUser.name} (${currentUser.role})` : 'Tim Auditor Gudang',
-            notes: adj.notes,
-          });
-        }
-      });
-      return updated;
-    });
+      const newTrx: StockTransaction = {
+        id: `trx-so-${Date.now()}-${adj.item.id}`,
+        timestamp: dateStr,
+        type: 'ADJUSTMENT',
+        itemId: adj.item.id,
+        sku: adj.item.sku,
+        itemName: adj.item.name,
+        category: adj.item.category,
+        quantity: Math.abs(adj.difference),
+        unit: adj.item.unit,
+        previousStock: prevStock,
+        newStock: adj.physicalStock,
+        referenceNo: `SO-AUDIT-${new Date().toISOString().slice(0, 10)}`,
+        projectOrLocation: 'Penyesuaian Fisik Stock Opname',
+        operator: currentUser ? `${currentUser.name} (${currentUser.role})` : 'Tim Auditor Gudang',
+        notes: adj.notes,
+      };
+      await saveStockTransaction(newTrx);
+    }
 
-    setTransactions((prev) => [...newTrxList, ...prev]);
-    showToast(`Stock Opname selesai! ${adjustments.length} item berhasil diselaraskan.`);
+    showToast(`Stock Opname selesai! ${adjustments.length} item berhasil diselaraskan di cloud.`);
     setCurrentTab('inventory');
   };
 
@@ -804,41 +577,38 @@ export default function App() {
     showToast(`Beralih akun ke: ${user.name} (${user.roleTitle})`);
   };
 
-  const handleUpdateItemBatches = (itemId: string, updatedBatches: BatchItem[]) => {
-    setItems((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, batches: updatedBatches } : item))
-    );
+  const handleUpdateItemBatches = async (itemId: string, updatedBatches: BatchItem[]) => {
+    const target = items.find((i) => i.id === itemId);
+    if (target) {
+      await saveInventoryItem({ ...target, batches: updatedBatches });
+    }
   };
 
   // Job Report Handlers: Operator & Admin can save job, QC can evaluate & approve
-  const handleSaveJobAndDeductStock = (
+  const handleSaveJobAndDeductStock = async (
     report: FumigationJobReport,
     medicineDeduction: { itemId: string; qty: number; batchNo?: string },
     fuelDeduction?: { itemId: string; qty: number; batchNo?: string },
     linkedRecommendationId?: string
   ) => {
-    setJobReports((prev) => [report, ...prev]);
+    await saveJobReport(report);
 
     // If linked to a raw material recommendation, update recommendation status to DIPROSES
     if (linkedRecommendationId) {
-      setRawRecommendations((prev) =>
-        prev.map((r) =>
-          r.id === linkedRecommendationId
-            ? {
-                ...r,
-                status: 'DIPROSES' as const,
-                linkedSpkNo: report.jobNo,
-                linkedJobReportId: report.id,
-                processedByOperator: report.operatorName,
-                processedAt: new Date().toISOString(),
-              }
-            : r
-        )
-      );
+      const rec = rawRecommendations.find((r) => r.id === linkedRecommendationId);
+      if (rec) {
+        await saveRawRecommendation({
+          ...rec,
+          status: 'DIPROSES' as const,
+          linkedSpkNo: report.jobNo,
+          linkedJobReportId: report.id,
+          processedByOperator: report.operatorName,
+          processedAt: new Date().toISOString(),
+        });
+      }
       setRecToExecuteAsSPK(null);
     }
 
-    const newTrxs: StockTransaction[] = [];
     const nowIso = new Date().toISOString();
 
     const medItem = items.find((i) => i.id === medicineDeduction.itemId);
@@ -846,7 +616,7 @@ export default function App() {
       const prevStock = medItem.currentStock;
       const newStock = Math.max(0, prevStock - medicineDeduction.qty);
 
-      newTrxs.push({
+      const medTrx: StockTransaction = {
         id: `trx-job-med-${Date.now()}`,
         timestamp: nowIso,
         type: 'OUT',
@@ -863,6 +633,12 @@ export default function App() {
         operator: report.operatorName,
         batchNo: medicineDeduction.batchNo,
         notes: `Pengeluaran obat kimia pekerjaan ${report.jobType} untuk SPK ${report.jobNo}`,
+      };
+      await saveStockTransaction(medTrx);
+      await saveInventoryItem({
+        ...medItem,
+        currentStock: newStock,
+        lastUpdated: nowIso.replace('T', ' ').slice(0, 16),
       });
     }
 
@@ -872,7 +648,7 @@ export default function App() {
         const prevStock = fuelItem.currentStock;
         const newStock = Math.max(0, prevStock - fuelDeduction.qty);
 
-        newTrxs.push({
+        const fuelTrx: StockTransaction = {
           id: `trx-job-fuel-${Date.now()}`,
           timestamp: nowIso,
           type: 'OUT',
@@ -889,58 +665,43 @@ export default function App() {
           operator: report.operatorName,
           batchNo: fuelDeduction.batchNo,
           notes: `Pengeluaran BBM operasional untuk SPK ${report.jobNo}`,
+        };
+        await saveStockTransaction(fuelTrx);
+        await saveInventoryItem({
+          ...fuelItem,
+          currentStock: newStock,
+          lastUpdated: nowIso.replace('T', ' ').slice(0, 16),
         });
       }
     }
 
-    setItems((prevItems) =>
-      prevItems.map((item) => {
-        if (item.id === medicineDeduction.itemId) {
-          return {
-            ...item,
-            currentStock: Math.max(0, item.currentStock - medicineDeduction.qty),
-            lastUpdated: nowIso.replace('T', ' ').slice(0, 16),
-          };
-        }
-        if (fuelDeduction && item.id === fuelDeduction.itemId) {
-          return {
-            ...item,
-            currentStock: Math.max(0, item.currentStock - fuelDeduction.qty),
-            lastUpdated: nowIso.replace('T', ' ').slice(0, 16),
-          };
-        }
-        return item;
-      })
-    );
-
-    setTransactions((prev) => [...newTrxs, ...prev]);
     showToast(`SPK ${report.jobNo} berhasil disimpan & stok bahan telah dikeluarkan dari gudang.`);
   };
 
-  const handleUpdateJobReport = (updated: FumigationJobReport) => {
-    setJobReports((prev) => prev.map((j) => (j.id === updated.id ? updated : j)));
+  const handleUpdateJobReport = async (updated: FumigationJobReport) => {
+    await saveJobReport(updated);
+    showToast(`Laporan pekerjaan SPK ${updated.jobNo} berhasil diperbarui.`);
   };
 
-  const handleDeleteJobReport = (id: string) => {
-    setJobReports((prev) => prev.filter((j) => j.id !== id));
+  const handleDeleteJobReport = async (id: string) => {
+    await deleteJobReport(id);
     showToast('Laporan pekerjaan berhasil dihapus.');
   };
 
   // Raw Material Recommendations Handlers (QC -> Operator & Admin)
-  const handleSaveRawRecommendation = (rec: RawMaterialRecommendation) => {
+  const handleSaveRawRecommendation = async (rec: RawMaterialRecommendation) => {
+    await saveRawRecommendation(rec);
     const exists = rawRecommendations.some((r) => r.id === rec.id);
-    if (exists) {
-      setRawRecommendations((prev) => prev.map((r) => (r.id === rec.id ? rec : r)));
-      showToast(`Rekomendasi bahan baku ${rec.recommendationNo} berhasil diperbarui.`);
-    } else {
-      setRawRecommendations((prev) => [rec, ...prev]);
-      showToast(`Rekomendasi ${rec.recommendationNo} (${rec.commodityName}) terkirim ke Operator & Admin!`);
-    }
+    showToast(
+      exists
+        ? `Rekomendasi bahan baku ${rec.recommendationNo} berhasil diperbarui.`
+        : `Rekomendasi ${rec.recommendationNo} (${rec.commodityName}) terkirim ke Operator & Admin!`
+    );
     setRawRecToEdit(null);
   };
 
-  const handleDeleteRawRecommendation = (id: string) => {
-    setRawRecommendations((prev) => prev.filter((r) => r.id !== id));
+  const handleDeleteRawRecommendation = async (id: string) => {
+    await deleteRawRecommendation(id);
     showToast('Rekomendasi bahan baku berhasil dihapus.');
   };
 
@@ -950,25 +711,22 @@ export default function App() {
   };
 
   // Handler: Konfirmasi Perintah Realisasi Pengerjaan Fumigasi / Spraying / Fogging
-  const handleConfirmTreatmentExecution = (
+  const handleConfirmTreatmentExecution = async (
     recId: string,
     executionRecord: TreatmentExecutionRecord,
     stockDeduction?: { itemId: string; quantity: number }
   ) => {
     // 1. Update status rekomendasi menjadi SELESAI dan lampirkan riwayat realisasi pengerjaan
-    setRawRecommendations((prev) =>
-      prev.map((rec) =>
-        rec.id === recId
-          ? {
-              ...rec,
-              status: 'SELESAI' as const,
-              treatmentExecutionRecord: executionRecord,
-              processedByOperator: executionRecord.executedBy,
-              processedAt: executionRecord.completedAt,
-            }
-          : rec
-      )
-    );
+    const rec = rawRecommendations.find((r) => r.id === recId);
+    if (rec) {
+      await saveRawRecommendation({
+        ...rec,
+        status: 'SELESAI' as const,
+        treatmentExecutionRecord: executionRecord,
+        processedByOperator: executionRecord.executedBy,
+        processedAt: executionRecord.completedAt,
+      });
+    }
 
     // 2. Jika dipilih potong stok otomatis, catat transaksi OUT di mutasi dan update stok barang inventaris
     if (stockDeduction && stockDeduction.quantity > 0) {
@@ -996,19 +754,12 @@ export default function App() {
           notes: `Realisasi ${executionRecord.treatmentType}: Obat ${executionRecord.usedMedicineName} pada ${executionRecord.warehouseLocation} (${executionRecord.treatedTonnage} ${executionRecord.tonnageUnit}). ${executionRecord.executionNotes || ''}`,
         };
 
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === medItem.id
-              ? {
-                  ...item,
-                  currentStock: newStock,
-                  lastUpdated: nowIso.replace('T', ' ').slice(0, 16),
-                }
-              : item
-          )
-        );
-
-        setTransactions((prev) => [outTrx, ...prev]);
+        await saveStockTransaction(outTrx);
+        await saveInventoryItem({
+          ...medItem,
+          currentStock: newStock,
+          lastUpdated: nowIso.replace('T', ' ').slice(0, 16),
+        });
       }
     }
 
@@ -1020,13 +771,8 @@ export default function App() {
   };
 
   // ================= ADMIN: KELOLA ID & PASSWORD PENGGUNA =================
-  const handleSaveUser = (user: AuthUser, isNew: boolean) => {
-    setAuthUsers((prev) => {
-      const exists = prev.some((u) => u.id === user.id);
-      const updated = exists ? prev.map((u) => (u.id === user.id ? user : u)) : [user, ...prev];
-      saveStoredAuthUsers(updated);
-      return updated;
-    });
+  const handleSaveUser = async (user: AuthUser, isNew: boolean) => {
+    await saveAuthUser(user);
 
     if (currentUser && currentUser.id === user.id) {
       setCurrentUser(user);
@@ -1034,12 +780,12 @@ export default function App() {
 
     showToast(
       isNew
-        ? `Akun ID "${user.username}" (${user.name}) berhasil dibuat.`
-        : `Data ID & kata sandi "${user.username}" berhasil diperbarui.`
+        ? `Akun ID "${user.username}" (${user.name}) berhasil dibuat di cloud Firestore.`
+        : `Data ID & kata sandi "${user.username}" berhasil diperbarui di cloud Firestore.`
     );
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     const adminCount = authUsers.filter((u) => u.role === 'ADMIN').length;
     const target = authUsers.find((u) => u.id === userId);
     if (target?.role === 'ADMIN' && adminCount <= 1) {
@@ -1047,127 +793,105 @@ export default function App() {
       return;
     }
 
-    setAuthUsers((prev) => {
-      const updated = prev.filter((u) => u.id !== userId);
-      saveStoredAuthUsers(updated);
-      return updated;
-    });
+    await deleteAuthUser(userId);
     showToast(`Akun ID "${target?.username || userId}" telah dihapus.`);
   };
 
   // Reset to initial demo dataset
-  const handleResetData = () => {
+  const handleResetData = async () => {
     if (confirm('Kembalikan semua data inventaris, mutasi, dan laporan pekerjaan ke sampel awal bawaan?')) {
-      setItems(INITIAL_ITEMS);
-      setTransactions(INITIAL_TRANSACTIONS);
-      setJobReports(INITIAL_JOB_REPORTS);
-      showToast('Database inventaris & SPK berhasil direset ke data sampel.');
+      for (const item of INITIAL_ITEMS) {
+        await saveInventoryItem(item);
+      }
+      for (const trx of INITIAL_TRANSACTIONS) {
+        await saveStockTransaction(trx);
+      }
+      for (const rep of INITIAL_JOB_REPORTS) {
+        await saveJobReport(rep);
+      }
+      showToast('Database inventaris & SPK berhasil direset ke data sampel di cloud.');
     }
   };
 
   // ================= MASTER DATA HANDLERS =================
-  const handleSaveSupplier = (sup: MasterSupplier) => {
-    setSuppliers((prev) => {
-      const exists = prev.some((s) => s.id === sup.id);
-      return exists ? prev.map((s) => (s.id === sup.id ? sup : s)) : [sup, ...prev];
-    });
-    showToast(`Data pemasok "${sup.name}" berhasil disimpan.`);
+  const handleSaveSupplier = async (sup: MasterSupplier) => {
+    await saveMasterDocument(COLLECTIONS.SUPPLIERS, sup);
+    showToast(`Data pemasok "${sup.name}" berhasil disimpan ke cloud.`);
   };
 
-  const handleDeleteSupplier = (id: string) => {
-    setSuppliers((prev) => prev.filter((s) => s.id !== id));
+  const handleDeleteSupplier = async (id: string) => {
+    await deleteMasterDocument(COLLECTIONS.SUPPLIERS, id);
     showToast('Data pemasok berhasil dihapus.');
   };
 
-  const handleSaveLocation = (loc: MasterLocation) => {
-    setLocations((prev) => {
-      const exists = prev.some((l) => l.id === loc.id);
-      return exists ? prev.map((l) => (l.id === loc.id ? loc : l)) : [loc, ...prev];
-    });
-    showToast(`Lokasi "${loc.name}" berhasil disimpan.`);
+  const handleSaveLocation = async (loc: MasterLocation) => {
+    await saveMasterDocument(COLLECTIONS.LOCATIONS, loc);
+    showToast(`Lokasi "${loc.name}" berhasil disimpan ke cloud.`);
   };
 
-  const handleDeleteLocation = (id: string) => {
-    setLocations((prev) => prev.filter((l) => l.id !== id));
+  const handleDeleteLocation = async (id: string) => {
+    await deleteMasterDocument(COLLECTIONS.LOCATIONS, id);
     showToast('Data lokasi berhasil dihapus.');
   };
 
-  const handleSaveOperator = (op: MasterOperator) => {
-    setOperators((prev) => {
-      const exists = prev.some((o) => o.id === op.id);
-      return exists ? prev.map((o) => (o.id === op.id ? op : o)) : [op, ...prev];
-    });
-    showToast(`Petugas "${op.name}" berhasil disimpan.`);
+  const handleSaveOperator = async (op: MasterOperator) => {
+    await saveMasterDocument(COLLECTIONS.OPERATORS, op);
+    showToast(`Petugas "${op.name}" berhasil disimpan ke cloud.`);
   };
 
-  const handleDeleteOperator = (id: string) => {
-    setOperators((prev) => prev.filter((o) => o.id !== id));
+  const handleDeleteOperator = async (id: string) => {
+    await deleteMasterDocument(COLLECTIONS.OPERATORS, id);
     showToast('Data petugas berhasil dihapus.');
   };
 
-  const handleSaveDestination = (dest: MasterProjectDestination) => {
-    setDestinations((prev) => {
-      const exists = prev.some((d) => d.id === dest.id);
-      return exists ? prev.map((d) => (d.id === dest.id ? dest : d)) : [dest, ...prev];
-    });
-    showToast(`Tujuan proyek "${dest.name}" berhasil disimpan.`);
+  const handleSaveDestination = async (dest: MasterProjectDestination) => {
+    await saveMasterDocument(COLLECTIONS.DESTINATIONS, dest);
+    showToast(`Tujuan proyek "${dest.name}" berhasil disimpan ke cloud.`);
   };
 
-  const handleDeleteDestination = (id: string) => {
-    setDestinations((prev) => prev.filter((d) => d.id !== id));
+  const handleDeleteDestination = async (id: string) => {
+    await deleteMasterDocument(COLLECTIONS.DESTINATIONS, id);
     showToast('Tujuan proyek berhasil dihapus.');
   };
 
-  const handleSaveUnit = (unit: MasterUnit) => {
-    setUnits((prev) => {
-      const exists = prev.some((u) => u.id === unit.id);
-      return exists ? prev.map((u) => (u.id === unit.id ? unit : u)) : [unit, ...prev];
-    });
-    showToast(`Satuan ukuran "${unit.name}" berhasil disimpan.`);
+  const handleSaveUnit = async (unit: MasterUnit) => {
+    await saveMasterDocument(COLLECTIONS.UNITS, unit);
+    showToast(`Satuan ukuran "${unit.name}" berhasil disimpan ke cloud.`);
   };
 
-  const handleDeleteUnit = (id: string) => {
-    setUnits((prev) => prev.filter((u) => u.id !== id));
+  const handleDeleteUnit = async (id: string) => {
+    await deleteMasterDocument(COLLECTIONS.UNITS, id);
     showToast('Satuan ukuran berhasil dihapus.');
   };
 
   // ================= MASTER: OBAT, BBM, INVENTARIS HANDLERS =================
-  const handleSaveMedicine = (med: MasterChemicalMedicine) => {
-    setMedicines((prev) => {
-      const exists = prev.some((m) => m.id === med.id);
-      return exists ? prev.map((m) => (m.id === med.id ? med : m)) : [med, ...prev];
-    });
-    showToast(`Master Obat "${med.name}" berhasil disimpan.`);
+  const handleSaveMedicine = async (med: MasterChemicalMedicine) => {
+    await saveMasterDocument(COLLECTIONS.MEDICINES, med);
+    showToast(`Master Obat "${med.name}" berhasil disimpan ke cloud.`);
   };
 
-  const handleDeleteMedicine = (id: string) => {
-    setMedicines((prev) => prev.filter((m) => m.id !== id));
+  const handleDeleteMedicine = async (id: string) => {
+    await deleteMasterDocument(COLLECTIONS.MEDICINES, id);
     showToast('Data master obat berhasil dihapus.');
   };
 
-  const handleSaveFuel = (fuel: MasterFuelType) => {
-    setFuels((prev) => {
-      const exists = prev.some((f) => f.id === fuel.id);
-      return exists ? prev.map((f) => (f.id === fuel.id ? fuel : f)) : [fuel, ...prev];
-    });
-    showToast(`Master BBM "${fuel.name}" berhasil disimpan.`);
+  const handleSaveFuel = async (fuel: MasterFuelType) => {
+    await saveMasterDocument(COLLECTIONS.FUELS, fuel);
+    showToast(`Master BBM "${fuel.name}" berhasil disimpan ke cloud.`);
   };
 
-  const handleDeleteFuel = (id: string) => {
-    setFuels((prev) => prev.filter((f) => f.id !== id));
+  const handleDeleteFuel = async (id: string) => {
+    await deleteMasterDocument(COLLECTIONS.FUELS, id);
     showToast('Data master BBM berhasil dihapus.');
   };
 
-  const handleSaveEquipment = (eqp: MasterEquipmentInventory) => {
-    setEquipment((prev) => {
-      const exists = prev.some((e) => e.id === eqp.id);
-      return exists ? prev.map((e) => (e.id === eqp.id ? eqp : e)) : [eqp, ...prev];
-    });
-    showToast(`Master Inventaris "${eqp.name}" berhasil disimpan.`);
+  const handleSaveEquipment = async (eqp: MasterEquipmentInventory) => {
+    await saveMasterDocument(COLLECTIONS.EQUIPMENT, eqp);
+    showToast(`Master Inventaris "${eqp.name}" berhasil disimpan ke cloud.`);
   };
 
-  const handleDeleteEquipment = (id: string) => {
-    setEquipment((prev) => prev.filter((e) => e.id !== id));
+  const handleDeleteEquipment = async (id: string) => {
+    await deleteMasterDocument(COLLECTIONS.EQUIPMENT, id);
     showToast('Data master inventaris berhasil dihapus.');
   };
 
@@ -1199,9 +923,9 @@ export default function App() {
   };
 
   // ================= SYSTEM SETTINGS & BACKUP HANDLERS =================
-  const handleSaveSettings = (newSettings: SystemSettings) => {
-    setSettings(newSettings);
-    showToast('Pengaturan sistem dan format dokumen berhasil disimpan.');
+  const handleSaveSettings = async (newSettings: SystemSettings) => {
+    await saveSystemSettings(newSettings);
+    showToast('Pengaturan sistem dan format dokumen berhasil disimpan ke cloud Firestore.');
   };
 
   const handleExportFullBackup = () => {
@@ -1233,43 +957,65 @@ export default function App() {
     showToast('Database gudang lengkap berhasil diekspor ke file JSON.');
   };
 
-  const handleImportBackup = (data: any) => {
+  const handleImportBackup = async (data: any) => {
     if (!data) return;
-    if (Array.isArray(data.items)) setItems(data.items);
-    if (Array.isArray(data.transactions)) setTransactions(data.transactions);
-    if (data.systemSettings) setSettings(data.systemSettings);
-    if (data.masterData) {
-      if (Array.isArray(data.masterData.medicines)) setMedicines(data.masterData.medicines);
-      if (Array.isArray(data.masterData.fuels)) setFuels(data.masterData.fuels);
-      if (Array.isArray(data.masterData.equipment)) setEquipment(data.masterData.equipment);
-      if (Array.isArray(data.masterData.suppliers)) setSuppliers(data.masterData.suppliers);
-      if (Array.isArray(data.masterData.locations)) setLocations(data.masterData.locations);
-      if (Array.isArray(data.masterData.operators)) setOperators(data.masterData.operators);
-      if (Array.isArray(data.masterData.destinations)) setDestinations(data.masterData.destinations);
-      if (Array.isArray(data.masterData.units)) setUnits(data.masterData.units);
+    if (Array.isArray(data.items)) {
+      for (const it of data.items) await saveInventoryItem(it);
     }
-    showToast('Database gudang dan master data berhasil dipulihkan dari cadangan.');
+    if (Array.isArray(data.transactions)) {
+      for (const trx of data.transactions) await saveStockTransaction(trx);
+    }
+    if (data.systemSettings) {
+      await saveSystemSettings(data.systemSettings);
+    }
+    if (data.masterData) {
+      if (Array.isArray(data.masterData.medicines)) {
+        for (const m of data.masterData.medicines) await saveMasterDocument(COLLECTIONS.MEDICINES, m);
+      }
+      if (Array.isArray(data.masterData.fuels)) {
+        for (const f of data.masterData.fuels) await saveMasterDocument(COLLECTIONS.FUELS, f);
+      }
+      if (Array.isArray(data.masterData.equipment)) {
+        for (const e of data.masterData.equipment) await saveMasterDocument(COLLECTIONS.EQUIPMENT, e);
+      }
+      if (Array.isArray(data.masterData.suppliers)) {
+        for (const s of data.masterData.suppliers) await saveMasterDocument(COLLECTIONS.SUPPLIERS, s);
+      }
+      if (Array.isArray(data.masterData.locations)) {
+        for (const l of data.masterData.locations) await saveMasterDocument(COLLECTIONS.LOCATIONS, l);
+      }
+      if (Array.isArray(data.masterData.operators)) {
+        for (const o of data.masterData.operators) await saveMasterDocument(COLLECTIONS.OPERATORS, o);
+      }
+      if (Array.isArray(data.masterData.destinations)) {
+        for (const d of data.masterData.destinations) await saveMasterDocument(COLLECTIONS.DESTINATIONS, d);
+      }
+      if (Array.isArray(data.masterData.units)) {
+        for (const u of data.masterData.units) await saveMasterDocument(COLLECTIONS.UNITS, u);
+      }
+    }
+    showToast('Database gudang dan master data berhasil dipulihkan dan disinkronkan ke cloud.');
   };
 
-  const handleResetFactoryData = () => {
+  const handleResetFactoryData = async () => {
     if (
       confirm(
         'PERINGATAN: Seluruh database (stok barang, riwayat transaksi, master data, dan pengaturan sistem) akan dikembalikan ke standar awal pabrik. Lanjutkan?'
       )
     ) {
-      setItems(INITIAL_ITEMS);
-      setTransactions(INITIAL_TRANSACTIONS);
-      setMedicines(INITIAL_CHEMICAL_MEDICINES);
-      setFuels(INITIAL_FUEL_TYPES);
-      setEquipment(INITIAL_EQUIPMENT_INVENTORY);
-      setSuppliers(INITIAL_SUPPLIERS);
-      setLocations(INITIAL_LOCATIONS);
-      setOperators(INITIAL_OPERATORS);
-      setDestinations(INITIAL_PROJECT_DESTINATIONS);
-      setUnits(INITIAL_UNITS);
-      setSettings(INITIAL_SYSTEM_SETTINGS);
-      setJobReports(INITIAL_JOB_REPORTS);
-      showToast('Database gudang berhasil direset ke standar pabrik.');
+      for (const item of INITIAL_ITEMS) await saveInventoryItem(item);
+      for (const trx of INITIAL_TRANSACTIONS) await saveStockTransaction(trx);
+      for (const med of INITIAL_CHEMICAL_MEDICINES) await saveMasterDocument(COLLECTIONS.MEDICINES, med);
+      for (const f of INITIAL_FUEL_TYPES) await saveMasterDocument(COLLECTIONS.FUELS, f);
+      for (const eq of INITIAL_EQUIPMENT_INVENTORY) await saveMasterDocument(COLLECTIONS.EQUIPMENT, eq);
+      for (const s of INITIAL_SUPPLIERS) await saveMasterDocument(COLLECTIONS.SUPPLIERS, s);
+      for (const l of INITIAL_LOCATIONS) await saveMasterDocument(COLLECTIONS.LOCATIONS, l);
+      for (const o of INITIAL_OPERATORS) await saveMasterDocument(COLLECTIONS.OPERATORS, o);
+      for (const d of INITIAL_PROJECT_DESTINATIONS) await saveMasterDocument(COLLECTIONS.DESTINATIONS, d);
+      for (const u of INITIAL_UNITS) await saveMasterDocument(COLLECTIONS.UNITS, u);
+      await saveSystemSettings(INITIAL_SYSTEM_SETTINGS);
+      for (const rep of INITIAL_JOB_REPORTS) await saveJobReport(rep);
+      showToast('Database gudang berhasil direset ke standar pabrik di cloud.');
     }
   };
 
@@ -2050,10 +1796,9 @@ export default function App() {
               </button>
             )}
 
-            {/* User Profile & Role Switcher */}
+            {/* User Profile Menu */}
             <UserProfileMenu
               currentUser={currentUser}
-              onSwitchUser={handleSwitchUser}
               onLogout={handleLogout}
               onOpenLoginDashboard={currentUser.role === 'ADMIN' ? () => setCurrentTab('admin_users') : undefined}
             />

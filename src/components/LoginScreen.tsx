@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { AuthUser, UserRole } from '../types/auth';
 import {
-  INITIAL_AUTH_USERS,
   DEMO_PASSWORDS,
   loadStoredAuthUsers,
 } from '../data/initialAuthUsers';
@@ -20,8 +19,6 @@ import {
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
-  UserCheck,
-  Microscope,
 } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -82,9 +79,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   // Use passed authUsers or load from persistent storage
   const activeAuthUsers = propAuthUsers || loadStoredAuthUsers();
 
-  // Main login form inputs
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin123');
+  // Main login form inputs (kosong agar pengguna memasukkan kredensial sendiri)
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -136,20 +133,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       setIsLoading(false);
       onLoginSuccess(foundUser);
     }, 200);
-  };
-
-  // Quick 1-click login from role chips
-  const handleQuickRoleSelect = (role: UserRole) => {
-    const user =
-      activeAuthUsers.find((u) => u.role === role) ||
-      INITIAL_AUTH_USERS.find((u) => u.role === role);
-    if (user) {
-      const pwd = user.password || DEMO_PASSWORDS[user.username] || 'admin123';
-      setUsername(user.username);
-      setPassword(pwd);
-      setErrorMessage(null);
-      onLoginSuccess(user);
-    }
   };
 
   return (
@@ -369,46 +352,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       </div>
 
       {/* ============================================================== */}
-      {/* QUICK ROLE SHORTCUTS BAR (BELOW CARD FOR EASY TESTING) */}
-      {/* ============================================================== */}
-      <div className="relative z-10 mt-6 flex flex-col items-center gap-2 max-w-[420px] w-full text-center">
-        <span className="text-[11px] font-mono uppercase tracking-wider text-cyan-200/60 font-semibold">
-          Akses Cepat Pengguna (1-Click Login):
-        </span>
-        <div className="flex items-center justify-center gap-2 flex-wrap w-full">
-          {/* Admin Role Shortcut */}
-          <button
-            type="button"
-            onClick={() => handleQuickRoleSelect('ADMIN')}
-            className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/40 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 backdrop-blur-md shadow-md"
-          >
-            <Shield className="w-3.5 h-3.5 text-amber-400" />
-            <span>Administrator</span>
-          </button>
-
-          {/* Operator Role Shortcut */}
-          <button
-            type="button"
-            onClick={() => handleQuickRoleSelect('OPERATOR')}
-            className="px-3.5 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 border border-sky-400/40 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 backdrop-blur-md shadow-md"
-          >
-            <UserCheck className="w-3.5 h-3.5 text-sky-400" />
-            <span>Operator</span>
-          </button>
-
-          {/* QC Role Shortcut */}
-          <button
-            type="button"
-            onClick={() => handleQuickRoleSelect('QC')}
-            className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/40 text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 backdrop-blur-md shadow-md"
-          >
-            <Microscope className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Quality Control</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ============================================================== */}
       {/* MODAL: FORGET PASSWORD & INFORMASI KEBIJAKAN ADMIN */}
       {/* ============================================================== */}
       {showForgetModal && (
@@ -453,40 +396,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               <p>
                 Jika Anda lupa password atau memerlukan ID login baru, silakan hubungi <strong>Bpk. Hendra Wijaya (Admin Gudang)</strong>.
               </p>
-
-              <div className="p-3 rounded-xl bg-slate-900/90 border border-white/15 space-y-1 font-mono text-[11px]">
-                <div className="text-slate-400 text-[10px] uppercase font-sans font-bold text-cyan-300">
-                  Kredensial Akses Administrator Bawaan:
-                </div>
-                <div className="flex justify-between text-slate-200">
-                  <span>Username (ID):</span>
-                  <span className="text-amber-400 font-bold">admin</span>
-                </div>
-                <div className="flex justify-between text-slate-200">
-                  <span>Password:</span>
-                  <span className="text-amber-400 font-bold">admin123</span>
-                </div>
-              </div>
             </div>
 
-            <div className="pt-2 border-t border-white/15 flex items-center justify-end gap-2">
+            <div className="pt-2 border-t border-white/15 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setShowForgetModal(false)}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
               >
                 Tutup
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUsername('admin');
-                  setPassword('admin123');
-                  setShowForgetModal(false);
-                }}
-                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
-              >
-                <span>Gunakan Akun Admin</span>
               </button>
             </div>
           </div>

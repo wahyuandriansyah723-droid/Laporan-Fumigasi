@@ -1,0 +1,168 @@
+{
+  "entities": {
+    "InventoryItem": {
+      "title": "InventoryItem",
+      "description": "Chemicals, fuels, and warehouse stock records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sku": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "currentStock": { "type": "number" },
+        "minimumStock": { "type": "number" },
+        "unit": { "type": "string" },
+        "location": { "type": "string" },
+        "lastUpdated": { "type": "string" }
+      },
+      "required": ["id", "sku", "name", "category", "currentStock", "unit"]
+    },
+    "StockTransaction": {
+      "title": "StockTransaction",
+      "description": "Inflow and outflow inventory mutation ledger",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "type": { "type": "string" },
+        "itemId": { "type": "string" },
+        "sku": { "type": "string" },
+        "itemName": { "type": "string" },
+        "category": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unit": { "type": "string" },
+        "previousStock": { "type": "number" },
+        "newStock": { "type": "number" }
+      },
+      "required": ["id", "timestamp", "type", "itemId", "quantity"]
+    },
+    "JobReport": {
+      "title": "JobReport",
+      "description": "Fumigation and spraying/fogging field job reports",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "jobNo": { "type": "string" },
+        "jobType": { "type": "string" },
+        "title": { "type": "string" },
+        "clientName": { "type": "string" },
+        "location": { "type": "string" },
+        "operatorName": { "type": "string" },
+        "rawMaterialName": { "type": "string" },
+        "medicineName": { "type": "string" },
+        "medicineQuantity": { "type": "number" },
+        "qcApprovalStatus": { "type": "string" }
+      },
+      "required": ["id", "jobNo", "jobType", "rawMaterialName"]
+    },
+    "RawMaterialRecommendation": {
+      "title": "RawMaterialRecommendation",
+      "description": "QC raw material dosage and treatment recommendation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "recommendationNo": { "type": "string" },
+        "commodityName": { "type": "string" },
+        "recommendedTreatmentType": { "type": "string" },
+        "recommendedMedicineName": { "type": "string" },
+        "calculatedDosage": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "recommendationNo", "commodityName", "status"]
+    },
+    "AuthUser": {
+      "title": "AuthUser",
+      "description": "User profile, credentials, and role permissions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "roleTitle": { "type": "string" },
+        "nip": { "type": "string" },
+        "email": { "type": "string" }
+      },
+      "required": ["id", "username", "name", "role"]
+    },
+    "MasterItem": {
+      "title": "MasterItem",
+      "description": "Generic master data record for suppliers, locations, units, etc.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "SystemSetting": {
+      "title": "SystemSetting",
+      "description": "Warehouse and applet system configurations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "companyName": { "type": "string" }
+      },
+      "required": ["id", "companyName"]
+    }
+  },
+  "firestore": {
+    "/inventory_items/{itemId}": {
+      "schema": "InventoryItem",
+      "description": "Real-time chemical, fuel and equipment inventory stocks"
+    },
+    "/stock_transactions/{transactionId}": {
+      "schema": "StockTransaction",
+      "description": "Real-time inventory inflows and outflows transactions"
+    },
+    "/job_reports/{jobReportId}": {
+      "schema": "JobReport",
+      "description": "Fumigation, spraying, and fogging work reports"
+    },
+    "/raw_recommendations/{recId}": {
+      "schema": "RawMaterialRecommendation",
+      "description": "QC raw material treatment recommendations"
+    },
+    "/auth_users/{userId}": {
+      "schema": "AuthUser",
+      "description": "System user profiles, roles, and password credentials"
+    },
+    "/master_suppliers/{supplierId}": {
+      "schema": "MasterItem",
+      "description": "Master registered suppliers"
+    },
+    "/master_locations/{locationId}": {
+      "schema": "MasterItem",
+      "description": "Master warehouse locations and silos"
+    },
+    "/master_operators/{operatorId}": {
+      "schema": "MasterItem",
+      "description": "Master field officers and technicians"
+    },
+    "/master_destinations/{destinationId}": {
+      "schema": "MasterItem",
+      "description": "Master project sites and export destinations"
+    },
+    "/master_units/{unitId}": {
+      "schema": "MasterItem",
+      "description": "Master measurement units"
+    },
+    "/master_medicines/{medicineId}": {
+      "schema": "MasterItem",
+      "description": "Master chemical medicines and pesticides"
+    },
+    "/master_fuels/{fuelId}": {
+      "schema": "MasterItem",
+      "description": "Master industrial and machine fuel types"
+    },
+    "/master_equipment/{equipmentId}": {
+      "schema": "MasterItem",
+      "description": "Master equipment tools and PPE"
+    },
+    "/system_settings/{settingId}": {
+      "schema": "SystemSetting",
+      "description": "System settings and metadata"
+    }
+  }
+}

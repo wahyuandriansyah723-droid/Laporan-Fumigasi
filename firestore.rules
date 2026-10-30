@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Default deny for unmatched documents
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Test connection document
+    match /test/connection {
+      allow read, write: if true;
+    }
+
+    // Warehouse Inventory Items Collection
+    match /inventory_items/{itemId} {
+      allow get: if isValidId(itemId);
+      allow list: if true;
+      allow write: if isValidId(itemId);
+    }
+
+    // Stock Transactions & Mutations Ledger
+    match /stock_transactions/{transactionId} {
+      allow get: if isValidId(transactionId);
+      allow list: if true;
+      allow write: if isValidId(transactionId);
+    }
+
+    // Fumigation & Spraying Job Reports
+    match /job_reports/{jobReportId} {
+      allow get: if isValidId(jobReportId);
+      allow list: if true;
+      allow write: if isValidId(jobReportId);
+    }
+
+    // QC Raw Material Treatment Recommendations
+    match /raw_recommendations/{recId} {
+      allow get: if isValidId(recId);
+      allow list: if true;
+      allow write: if isValidId(recId);
+    }
+
+    // System User Credentials and RBAC Permissions
+    match /auth_users/{userId} {
+      allow get: if isValidId(userId);
+      allow list: if true;
+      allow write: if isValidId(userId);
+    }
+
+    // Master Suppliers
+    match /master_suppliers/{supplierId} {
+      allow get: if isValidId(supplierId);
+      allow list: if true;
+      allow write: if isValidId(supplierId);
+    }
+
+    // Master Warehouse Locations
+    match /master_locations/{locationId} {
+      allow get: if isValidId(locationId);
+      allow list: if true;
+      allow write: if isValidId(locationId);
+    }
+
+    // Master Field Operators
+    match /master_operators/{operatorId} {
+      allow get: if isValidId(operatorId);
+      allow list: if true;
+      allow write: if isValidId(operatorId);
+    }
+
+    // Master Project Destinations
+    match /master_destinations/{destinationId} {
+      allow get: if isValidId(destinationId);
+      allow list: if true;
+      allow write: if isValidId(destinationId);
+    }
+
+    // Master Units
+    match /master_units/{unitId} {
+      allow get: if isValidId(unitId);
+      allow list: if true;
+      allow write: if isValidId(unitId);
+    }
+
+    // Master Medicines
+    match /master_medicines/{medicineId} {
+      allow get: if isValidId(medicineId);
+      allow list: if true;
+      allow write: if isValidId(medicineId);
+    }
+
+    // Master Fuel Types
+    match /master_fuels/{fuelId} {
+      allow get: if isValidId(fuelId);
+      allow list: if true;
+      allow write: if isValidId(fuelId);
+    }
+
+    // Master Equipment
+    match /master_equipment/{equipmentId} {
+      allow get: if isValidId(equipmentId);
+      allow list: if true;
+      allow write: if isValidId(equipmentId);
+    }
+
+    // System Settings & Backup Data
+    match /system_settings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow write: if isValidId(settingId);
+    }
+  }
+}

@@ -1,32 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AuthUser, UserRole } from '../types/auth';
-import { INITIAL_AUTH_USERS } from '../data/initialAuthUsers';
 import {
-  Shield,
-  UserCheck,
-  Microscope,
   LogOut,
   ChevronDown,
-  Check,
   User,
-  Sparkles,
   KeyRound,
   ShieldCheck,
   Phone,
   Mail,
-  BadgeAlert,
 } from 'lucide-react';
 
 interface UserProfileMenuProps {
   currentUser: AuthUser;
-  onSwitchUser: (newUser: AuthUser) => void;
   onLogout: () => void;
   onOpenLoginDashboard?: () => void;
 }
 
 export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
   currentUser,
-  onSwitchUser,
   onLogout,
   onOpenLoginDashboard,
 }) => {
@@ -43,17 +34,6 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const getRoleIcon = (role: UserRole) => {
-    switch (role) {
-      case 'ADMIN':
-        return <Shield className="w-3.5 h-3.5 text-amber-400" />;
-      case 'OPERATOR':
-        return <UserCheck className="w-3.5 h-3.5 text-blue-400" />;
-      case 'QC':
-        return <Microscope className="w-3.5 h-3.5 text-emerald-400" />;
-    }
-  };
 
   const getRoleBadgeClasses = (role: UserRole) => {
     switch (role) {
@@ -186,43 +166,8 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
             </div>
           </div>
 
-          {/* Quick Switch Role */}
-          <div className="pt-3 pb-2">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Ganti Akun Cepat</span>
-            </p>
-            <div className="space-y-1">
-              {INITIAL_AUTH_USERS.map((user) => {
-                const isSelected = user.id === currentUser.id;
-                return (
-                  <button
-                    key={user.id}
-                    type="button"
-                    onClick={() => {
-                      onSwitchUser(user);
-                      setIsOpen(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
-                      isSelected
-                        ? 'bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/30'
-                        : 'hover:bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {getRoleIcon(user.role)}
-                      <span>{user.name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">({user.role})</span>
-                    </div>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-amber-400" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Logout Action */}
-          <div className="pt-2 border-t border-slate-800 space-y-1.5">
+          <div className="pt-3 border-t border-slate-800 space-y-1.5">
             {onOpenLoginDashboard && currentUser.role === 'ADMIN' && (
               <button
                 type="button"
