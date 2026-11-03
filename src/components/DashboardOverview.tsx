@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { InventoryItem, StockTransaction, Category } from '../types/inventory';
+import { AuthUser } from '../types/auth';
 import { FuelTankMonitor } from './FuelTankMonitor';
 import {
   Fuel,
@@ -45,6 +46,7 @@ import { HazardBadge } from './HazardBadge';
 interface DashboardOverviewProps {
   items: InventoryItem[];
   transactions: StockTransaction[];
+  currentUser?: AuthUser;
   onOpenQuickTransaction: (type: 'IN' | 'OUT', item?: InventoryItem, suggestedQty?: number) => void;
   onOpenScanner: () => void;
   onOpenStockOpname: () => void;
@@ -52,11 +54,13 @@ interface DashboardOverviewProps {
   onNavigateToTab: (tab: 'inventory' | 'mutations' | 'outflows') => void;
   onViewItemDetails: (item: InventoryItem) => void;
   onPrintSuratJalan: (trx: StockTransaction) => void;
+  onUpdateTankCapacity?: (itemId: string, newCapacity: number, newMinThreshold?: number, locationName?: string) => void;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   items,
   transactions,
+  currentUser,
   onOpenQuickTransaction,
   onOpenScanner,
   onOpenStockOpname,
@@ -64,6 +68,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onNavigateToTab,
   onViewItemDetails,
   onPrintSuratJalan,
+  onUpdateTankCapacity,
 }) => {
   const [alertFilter, setAlertFilter] = useState<'ALL' | 'CRITICAL' | 'EXPIRING'>('ALL');
   const [alertCategoryFilter, setAlertCategoryFilter] = useState<Category | 'ALL'>('ALL');
@@ -748,6 +753,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
       <FuelTankMonitor
         items={items}
         onQuickAction={(item, action) => onOpenQuickTransaction(action, item)}
+        onUpdateTankCapacity={onUpdateTankCapacity}
+        canEditCapacity={!currentUser || currentUser.role === 'ADMIN' || currentUser.role === 'OPERATOR' || currentUser.permissions.canManageInventory}
       />
 
       {/* Quick Action Dock */}

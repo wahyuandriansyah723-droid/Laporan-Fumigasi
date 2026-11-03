@@ -253,6 +253,12 @@ export const MedicinesSection: React.FC<MedicinesSectionProps> = ({
                       <span className="text-slate-500">No. Registrasi:</span>
                       <span className="text-slate-300 font-semibold">{m.registrationNumber}</span>
                     </div>
+                    {m.warehouseCapacity && (
+                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-slate-400 bg-slate-950/80 p-1.5 rounded border border-amber-500/20">
+                        <span className="text-slate-500">Kapasitas Gudang Obat:</span>
+                        <span className="text-amber-400 font-bold">{m.warehouseCapacity}</span>
+                      </div>
+                    )}
                     {m.storageRequirement && (
                       <div className="text-[10px] text-slate-400 bg-slate-950/60 p-1.5 rounded border border-slate-800/80 leading-relaxed">
                         <strong className="text-slate-300">Penyimpanan:</strong> {m.storageRequirement}
@@ -570,19 +576,10 @@ export const FuelsSection: React.FC<FuelsSectionProps> = ({
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
                       <span className="text-[10px] text-slate-500 uppercase font-mono block">
-                        Massa Jenis / Densitas:
+                        Kapasitas Maksimal Tangki:
                       </span>
-                      <span className="text-xs font-mono font-bold text-slate-200">
-                        {f.density} kg/Liter
-                      </span>
-                    </div>
-
-                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
-                      <span className="text-[10px] text-slate-500 uppercase font-mono block">
-                        Titik Nyala (Flash Point):
-                      </span>
-                      <span className="text-xs font-mono font-bold text-slate-200">
-                        {f.flashPoint}
+                      <span className="text-xs font-mono font-bold text-sky-400">
+                        {(f.tankCapacity || (f.fuelCategory === 'SOLAR_DIESEL' ? 5000 : 2000)).toLocaleString('id-ID')} Liter
                       </span>
                     </div>
 
@@ -597,6 +594,15 @@ export const FuelsSection: React.FC<FuelsSectionProps> = ({
 
                     <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
                       <span className="text-[10px] text-slate-500 uppercase font-mono block">
+                        Massa Jenis / Densitas:
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-200">
+                        {f.density} kg/Liter
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-950 p-2 rounded-lg border border-slate-800">
+                      <span className="text-[10px] text-slate-500 uppercase font-mono block">
                         Harga Baku Patokan:
                       </span>
                       <span className="text-xs font-mono font-bold text-emerald-400">
@@ -606,10 +612,15 @@ export const FuelsSection: React.FC<FuelsSectionProps> = ({
                   </div>
 
                   {/* Storage Tank */}
-                  <div className="text-[11px] text-slate-400 flex items-center gap-1.5 font-mono bg-slate-950/60 p-2 rounded border border-slate-800/80">
-                    <Fuel className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>Tangki / Drum Penyimpanan:</span>
-                    <strong className="text-slate-200 font-semibold">{f.defaultTankLocation}</strong>
+                  <div className="text-[11px] text-slate-400 flex items-center justify-between font-mono bg-slate-950/60 p-2 rounded border border-slate-800/80">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Fuel className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-slate-500">Tangki / Lokasi:</span>
+                      <strong className="text-slate-200 font-semibold truncate">{f.defaultTankLocation}</strong>
+                    </div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-300 font-bold border border-sky-500/20 shrink-0">
+                      Kap: {(f.tankCapacity || (f.fuelCategory === 'SOLAR_DIESEL' ? 5000 : 2000)).toLocaleString('id-ID')} L
+                    </span>
                   </div>
 
                   {f.notes && (
@@ -627,30 +638,52 @@ export const FuelsSection: React.FC<FuelsSectionProps> = ({
                             f.name.toLowerCase().includes(it.name.toLowerCase().slice(0, 5))))
                     );
 
+                    const capacity = f.tankCapacity || (f.fuelCategory === 'SOLAR_DIESEL' ? 5000 : 2000);
+
                     if (linkedItem) {
                       const isLowStock = linkedItem.currentStock <= linkedItem.minimumStockThreshold;
+                      const fillPercent = Math.min(100, Math.round((linkedItem.currentStock / capacity) * 100));
+
                       return (
-                        <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 text-xs font-mono">
-                            <Fuel className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                            <span className="text-slate-400">Stok Fisik Tangki:</span>
-                            <span
-                              className={`font-bold ${
-                                isLowStock ? 'text-amber-400' : 'text-emerald-400'
-                              }`}
-                            >
-                              {linkedItem.currentStock.toLocaleString('id-ID')} {linkedItem.unit}
+                        <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 text-xs font-mono">
+                              <Fuel className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                              <span className="text-slate-400">Stok Fisik Tangki:</span>
+                              <span
+                                className={`font-bold ${
+                                  isLowStock ? 'text-amber-400' : 'text-emerald-400'
+                                }`}
+                              >
+                                {linkedItem.currentStock.toLocaleString('id-ID')} / {capacity.toLocaleString('id-ID')} L
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 font-bold">
+                              {fillPercent}% Terisi
                             </span>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              Tersinkron
-                            </span>
+
+                          {/* Tank Level Gauge Bar */}
+                          <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-300 ${
+                                isLowStock
+                                  ? 'bg-amber-500'
+                                  : fillPercent > 85
+                                  ? 'bg-emerald-400'
+                                  : 'bg-sky-400'
+                              }`}
+                              style={{ width: `${Math.max(3, fillPercent)}%` }}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] font-mono text-slate-500">
+                            <span>Sisa Ruang Kosong: {Math.max(0, capacity - linkedItem.currentStock).toLocaleString('id-ID')} L</span>
                             {onNavigateToMutations && (
                               <button
                                 type="button"
                                 onClick={() => onNavigateToMutations(linkedItem.name)}
-                                className="text-[10px] text-slate-400 hover:text-amber-400 underline font-mono ml-1 cursor-pointer"
+                                className="text-slate-400 hover:text-amber-400 underline cursor-pointer"
                                 title="Lihat riwayat mutasi BBM ini"
                               >
                                 Mutasi
@@ -662,7 +695,7 @@ export const FuelsSection: React.FC<FuelsSectionProps> = ({
                     } else {
                       return (
                         <div className="bg-slate-950/40 p-2 rounded-lg border border-dashed border-slate-800 text-[11px] font-mono text-slate-500 flex items-center justify-between">
-                          <span>Belum didaftarkan ke tangki/drum stok fisik</span>
+                          <span>Kapasitas Tangki Ditetapkan: {capacity.toLocaleString('id-ID')} L</span>
                           <span className="text-[10px] text-slate-600">Katalog Master</span>
                         </div>
                       );

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FumigationJobReport, QCRecommendation, QCApprovalStatus } from '../types/jobs';
+import { JobType, FumigationJobReport, QCRecommendation, QCApprovalStatus } from '../types/jobs';
 import { AuthUser } from '../types/auth';
 import {
   FileCheck2,
@@ -39,13 +39,15 @@ import {
   Eye,
   FileSpreadsheet,
 } from 'lucide-react';
-import { formatNumberID } from '../utils/formatters';
+import { formatNumberID, getDayNameIndo } from '../utils/formatters';
+import { JapfaFumigationDocument } from './JapfaFumigationDocument';
 
 interface QCJobReportsViewProps {
   jobReports: FumigationJobReport[];
   currentUser: AuthUser;
   onUpdateJobReport: (updatedReport: FumigationJobReport) => void;
   onDeleteJobReport?: (id: string) => void;
+  onDeleteAllJobReports?: (jobType?: 'FUMIGASI' | 'SPRAYING_FOGGING') => void;
   onOpenNewJobModal?: (preselectedType?: 'FUMIGASI' | 'SPRAYING_FOGGING') => void;
   onShowToast: (message: string) => void;
   forcedJobType?: 'FUMIGASI' | 'SPRAYING_FOGGING';
@@ -56,6 +58,7 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
   currentUser,
   onUpdateJobReport,
   onDeleteJobReport,
+  onDeleteAllJobReports,
   onOpenNewJobModal,
   onShowToast,
   forcedJobType,
@@ -63,6 +66,8 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRecommendation, setFilterRecommendation] = useState<string>('ALL');
   const [filterType, setFilterType] = useState<string>(forcedJobType || 'ALL');
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState<boolean>(false);
+  const [deleteAllScope, setDeleteAllScope] = useState<'ALL' | 'FUMIGASI' | 'SPRAYING_FOGGING'>('ALL');
   const [filterRawMaterial, setFilterRawMaterial] = useState<string>('ALL');
   const [filterLocation, setFilterLocation] = useState<string>('ALL');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
@@ -94,6 +99,7 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
 
   // Edit job modal states ("bisa di edit simpan dan hapus")
   const [selectedJobForEdit, setSelectedJobForEdit] = useState<FumigationJobReport | null>(null);
+  const [editJobType, setEditJobType] = useState<JobType>('FUMIGASI');
   const [editRawMaterialName, setEditRawMaterialName] = useState<string>('');
   const [editClosingDate, setEditClosingDate] = useState<string>('');
   const [editOpeningDate, setEditOpeningDate] = useState<string>('');
@@ -106,8 +112,32 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
   const [editTargetPest, setEditTargetPest] = useState<string>('');
   const [editNotes, setEditNotes] = useState<string>('');
 
+  // Technical & Fuel fields
+  const [editGasConcentrationPpm, setEditGasConcentrationPpm] = useState<string>('');
+  const [editExposureHours, setEditExposureHours] = useState<string>('');
+  const [editTarpCondition, setEditTarpCondition] = useState<string>('');
+  const [editFuelQuantity, setEditFuelQuantity] = useState<string>('');
+  const [editFuelName, setEditFuelName] = useState<string>('');
+
+  // JAPFA Form PLT-WRH-FM 01-09 state
+  const [editRequestDate, setEditRequestDate] = useState<string>('');
+  const [editRawMaterialBatch, setEditRawMaterialBatch] = useState<string>('');
+  const [editTonnage, setEditTonnage] = useState<string>('');
+  const [editWarehouseKavling, setEditWarehouseKavling] = useState<string>('');
+  const [editFumigantName, setEditFumigantName] = useState<string>('');
+  const [editControlType, setEditControlType] = useState<string>('');
+  const [editExecutionDay, setEditExecutionDay] = useState<string>('');
+  const [editOpeningDay, setEditOpeningDay] = useState<string>('');
+  const [editOperatorName, setEditOperatorName] = useState<string>('');
+  const [editWarehouseSupervisorName, setEditWarehouseSupervisorName] = useState<string>('');
+  const [editQcSupervisorName, setEditQcSupervisorName] = useState<string>('');
+
+  // Print view mode toggle for Fumigasi (Default to official JAPFA form)
+  const [printDocType, setPrintDocType] = useState<'JAPFA' | 'ISPM15'>('JAPFA');
+
   const handleOpenEdit = (job: FumigationJobReport) => {
     setSelectedJobForEdit(job);
+    setEditJobType(job.jobType);
     setEditRawMaterialName(job.rawMaterialName || job.targetObject || '');
     setEditClosingDate(job.closingDate || job.executionDate || '');
     setEditOpeningDate(job.openingDate || job.aerationDate || '');
@@ -119,21 +149,37 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
     setEditLocation(job.location || '');
     setEditTargetPest(job.targetPest || '');
     setEditNotes(job.notes || '');
+
+    // Technical fields
+    setEditGasConcentrationPpm(job.gasConcentrationPpm ? String(job.gasConcentrationPpm) : '');
+    setEditExposureHours(job.exposureHours ? String(job.exposureHours) : '');
+    setEditTarpCondition(job.tarpCondition || '');
+    setEditFuelQuantity(job.fuelQuantity ? String(job.fuelQuantity) : '');
+    setEditFuelName(job.fuelName || '');
+
+    // JAPFA fields
+    setEditRequestDate(job.requestDate || job.closingDate || job.executionDate || '');
+    setEditRawMaterialBatch(job.rawMaterialBatch || job.medicineBatchNo || 'BATCH-JPF-2026-088');
+    setEditTonnage(job.tonnage || '1.250 Ton');
+    setEditWarehouseKavling(job.warehouseKavling || job.location || 'Gudang 03 / Kavling K-04');
+    setEditFumigantName(job.fumigantName || job.medicineName || 'Quickphos 56 TB');
+    setEditControlType(job.controlType || 'Fumigasi (Gassing) Cover Sheet');
+    setEditExecutionDay(job.executionDay || getDayNameIndo(job.closingDate || job.executionDate) || 'Senin');
+    setEditOpeningDay(job.openingDay || getDayNameIndo(job.openingDate || job.aerationDate) || 'Kamis');
+    setEditOperatorName(job.operatorName || currentUser.name);
+    setEditWarehouseSupervisorName(job.warehouseSupervisorName || 'RM WH Supervisor');
+    setEditQcSupervisorName(job.qcSupervisorName || job.qcInspector || 'QC Supervisor');
   };
 
   const handleSaveEdit = () => {
     if (!selectedJobForEdit) return;
 
     if (!editRawMaterialName.trim()) {
-      onShowToast('Nama bahan baku wajib diisi!');
+      onShowToast('Nama sasaran / bahan baku wajib diisi!');
       return;
     }
     if (!editClosingDate) {
-      onShowToast('Tanggal tutup wajib diisi!');
-      return;
-    }
-    if (!editOpeningDate) {
-      onShowToast('Tanggal buka wajib diisi!');
+      onShowToast('Tanggal pelaksanaan wajib diisi!');
       return;
     }
     const parsedQty = parseFloat(editMedicineQuantity);
@@ -142,21 +188,48 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
       return;
     }
 
+    const isFumigasi = editJobType === 'FUMIGASI';
+    const parsedGas = editGasConcentrationPpm ? parseFloat(editGasConcentrationPpm) : undefined;
+    const parsedHours = editExposureHours ? parseFloat(editExposureHours) : undefined;
+    const parsedFuel = editFuelQuantity ? parseFloat(editFuelQuantity) : undefined;
+
     const updated: FumigationJobReport = {
       ...selectedJobForEdit,
+      jobType: editJobType,
+      formCode: isFumigasi ? 'PLT-WRH-FM 01-09' : undefined,
+      companyName: isFumigasi ? 'PT. JAPFA COMFEED INDONESIA Tbk' : (editClientName.trim() || selectedJobForEdit.companyName),
+      unitName: isFumigasi ? 'Unit Lampung' : undefined,
+      documentTitle: isFumigasi ? 'BERITA ACARA PENGENDALIAN HAMA' : 'LAPORAN PEKERJAAN SPRAYING & FOGGING',
+      requestDate: editRequestDate || editClosingDate,
       rawMaterialName: editRawMaterialName.trim(),
-      targetObject: editRawMaterialName.trim(),
+      rawMaterialBatch: isFumigasi ? (editRawMaterialBatch.trim() || undefined) : undefined,
+      tonnage: isFumigasi ? (editTonnage.trim() || undefined) : undefined,
+      warehouseKavling: isFumigasi ? (editWarehouseKavling.trim() || undefined) : undefined,
+      fumigantName: isFumigasi ? (editFumigantName.trim() || editMedicineName.trim() || undefined) : undefined,
+      fumigantQuantityStr: isFumigasi ? `${parsedQty} ${editMedicineUnit}` : undefined,
+      controlType: isFumigasi ? (editControlType.trim() || 'Fumigasi (Gassing) Cover Sheet') : undefined,
+      executionDay: isFumigasi ? (editExecutionDay.trim() || getDayNameIndo(editClosingDate) || 'Senin') : undefined,
+      openingDay: isFumigasi ? (editOpeningDay.trim() || getDayNameIndo(editOpeningDate) || 'Kamis') : undefined,
+      warehouseSupervisorName: isFumigasi ? (editWarehouseSupervisorName.trim() || 'RM WH Supervisor') : undefined,
+      qcSupervisorName: isFumigasi ? (editQcSupervisorName.trim() || 'QC Supervisor') : undefined,
+      operatorName: editOperatorName.trim() || selectedJobForEdit.operatorName,
+      targetObject: isFumigasi ? `${editRawMaterialName.trim()} - ${editTonnage.trim()}` : editRawMaterialName.trim(),
       closingDate: editClosingDate,
-      openingDate: editOpeningDate,
+      openingDate: editOpeningDate || editClosingDate,
       executionDate: editClosingDate,
-      aerationDate: editOpeningDate,
+      aerationDate: editOpeningDate || editClosingDate,
       medicineQuantity: parsedQty,
       medicineName: editMedicineName.trim() || selectedJobForEdit.medicineName,
       medicineUnit: editMedicineUnit || selectedJobForEdit.medicineUnit,
-      title: editTitle.trim() || selectedJobForEdit.title,
-      clientName: editClientName.trim() || selectedJobForEdit.clientName,
-      location: editLocation.trim() || selectedJobForEdit.location,
+      title: editTitle.trim() || (isFumigasi ? `Berita Acara Pengendalian Hama Fumigasi ${editRawMaterialName}` : `Spraying & Fogging ${editRawMaterialName}`),
+      clientName: isFumigasi ? 'PT. JAPFA COMFEED INDONESIA Tbk - Unit Lampung' : (editClientName.trim() || selectedJobForEdit.clientName),
+      location: isFumigasi ? (editWarehouseKavling.trim() || editLocation.trim() || selectedJobForEdit.location) : (editLocation.trim() || selectedJobForEdit.location),
       targetPest: editTargetPest.trim() || selectedJobForEdit.targetPest,
+      gasConcentrationPpm: isFumigasi && !isNaN(parsedGas as number) ? parsedGas : undefined,
+      exposureHours: !isNaN(parsedHours as number) ? parsedHours : undefined,
+      tarpCondition: editTarpCondition.trim() || undefined,
+      fuelQuantity: !isFumigasi && !isNaN(parsedFuel as number) ? parsedFuel : undefined,
+      fuelName: !isFumigasi ? (editFuelName.trim() || selectedJobForEdit.fuelName) : undefined,
       notes: editNotes.trim() || selectedJobForEdit.notes,
     };
 
@@ -487,6 +560,24 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
               <Download className="w-3.5 h-3.5 text-emerald-400" />
               <span className="hidden sm:inline">Ekspor CSV</span>
             </button>
+
+            {/* Hapus Semua Laporan */}
+            {onDeleteAllJobReports && canDeleteJob && jobReports.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteAllScope(forcedJobType || (filterType !== 'ALL' ? (filterType as any) : 'ALL'));
+                  setShowDeleteAllModal(true);
+                }}
+                className="px-3 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-rose-100 border border-rose-800/60 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Hapus massal laporan pekerjaan dari database cloud"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline">
+                  Hapus Semua{forcedJobType === 'FUMIGASI' ? ' Fumigasi' : forcedJobType === 'SPRAYING_FOGGING' ? ' Fogging' : ' Laporan'}
+                </span>
+              </button>
+            )}
 
             {/* Input Pekerjaan Baru */}
             {onOpenNewJobModal && (currentUser.permissions.canInputJobReports || currentUser.role === 'ADMIN') && (
@@ -1016,9 +1107,12 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                           {/* Cetak */}
                           <button
                             type="button"
-                            onClick={() => setSelectedJobForPrint(job)}
+                            onClick={() => {
+                              setPrintDocType('JAPFA');
+                              setSelectedJobForPrint(job);
+                            }}
                             className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                            title="Cetak Lembar Resmi"
+                            title={isFumigasi ? 'Cetak Form Berita Acara JAPFA (PLT-WRH-FM 01-09)' : 'Cetak Lembar Resmi'}
                           >
                             <Printer className="w-3.5 h-3.5 text-amber-400" />
                           </button>
@@ -1150,12 +1244,19 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                   <div className="flex items-center gap-1.5 self-end sm:self-auto">
                     <button
                       type="button"
-                      onClick={() => setSelectedJobForPrint(job)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all border border-slate-700 cursor-pointer flex items-center gap-1"
-                      title="Cetak Dokumen"
+                      onClick={() => {
+                        setPrintDocType('JAPFA');
+                        setSelectedJobForPrint(job);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border cursor-pointer flex items-center gap-1 ${
+                        isFumigasi
+                          ? 'bg-red-950/40 hover:bg-red-900/60 text-red-200 border-red-500/40 hover:border-red-400'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700'
+                      }`}
+                      title={isFumigasi ? 'Cetak Form Berita Acara JAPFA (PLT-WRH-FM 01-09)' : 'Cetak Dokumen'}
                     >
                       <Printer className="w-3 h-3 text-amber-400" />
-                      <span>Cetak</span>
+                      <span>{isFumigasi ? 'Form JAPFA' : 'Cetak'}</span>
                     </button>
 
                     {canEditJob && (
@@ -1711,7 +1812,37 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
             <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/90 print:hidden">
               <div className="flex items-center gap-2">
                 <FileCheck2 className="w-5 h-5 text-emerald-400" />
-                <span className="font-bold text-white text-sm">Lembar Laporan Resmi Fumigasi &amp; Pest Control</span>
+                <span className="font-bold text-white text-sm">
+                  {selectedJobForPrint.jobType === 'FUMIGASI'
+                    ? 'Berita Acara Pengendalian Hama (PLT-WRH-FM 01-09)'
+                    : 'Lembar Laporan Resmi Spraying & Fogging'}
+                </span>
+                {selectedJobForPrint.jobType === 'FUMIGASI' && (
+                  <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg p-0.5 ml-2">
+                    <button
+                      type="button"
+                      onClick={() => setPrintDocType('JAPFA')}
+                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                        printDocType === 'JAPFA'
+                          ? 'bg-red-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Form Resmi JAPFA
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrintDocType('ISPM15')}
+                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                        printDocType === 'ISPM15'
+                          ? 'bg-blue-600 text-white shadow'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Format ISPM-15
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -1733,159 +1864,167 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
             </div>
 
             {/* Document Content */}
-            <div className="p-6 sm:p-8 bg-slate-950 text-slate-100 space-y-6 max-h-[80vh] overflow-y-auto">
-              {/* Document Header */}
-              <div className="border-b-2 border-slate-700 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-sm">
-                      LOGIX-WMS
-                    </span>
-                    <h2 className="text-lg font-black tracking-wider uppercase text-white">
-                      BERITA ACARA LAPORAN PEKERJAAN FUMIGASI
-                    </h2>
-                  </div>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Standar Badan Karantina Indonesia &bull; Regulasi ISPM-15 &bull; Sertifikasi Bebas Hama Gudang
-                  </p>
+            <div className="p-4 sm:p-6 bg-slate-950 text-slate-100 max-h-[85vh] overflow-y-auto">
+              {selectedJobForPrint.jobType === 'FUMIGASI' && printDocType === 'JAPFA' ? (
+                <div className="py-2">
+                  <JapfaFumigationDocument job={selectedJobForPrint} printable />
                 </div>
-                <div className="text-left sm:text-right font-mono text-xs text-slate-300">
-                  <div>No. Registrasi: <strong className="text-amber-400">{selectedJobForPrint.jobNo}</strong></div>
-                  <div>Tgl Dokumen: {selectedJobForPrint.createdAt.slice(0, 10)}</div>
-                </div>
-              </div>
-
-              {/* 4 DATA POKOK UTAMA FUMIGASI (Format Tabel Resmi) */}
-              <div className="space-y-2">
-                <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>Ringkasan Parameter Perlakuan Fumigasi</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  {/* 1. NAMA BAHAN BAKU */}
-                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase">1. Nama Bahan Baku / Komoditas:</div>
-                    <div className="text-base font-bold text-white">
-                      {selectedJobForPrint.rawMaterialName || selectedJobForPrint.targetObject}
+              ) : (
+                <div className="space-y-6">
+                  {/* Document Header */}
+                  <div className="border-b-2 border-slate-700 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold text-sm">
+                          LOGIX-WMS
+                        </span>
+                        <h2 className="text-lg font-black tracking-wider uppercase text-white">
+                          BERITA ACARA LAPORAN PEKERJAAN FUMIGASI
+                        </h2>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Standar Badan Karantina Indonesia &bull; Regulasi ISPM-15 &bull; Sertifikasi Bebas Hama Gudang
+                      </p>
                     </div>
-                    <div className="text-slate-400 text-[11px]">
-                      Klien: {selectedJobForPrint.clientName} &bull; Lokasi: {selectedJobForPrint.location}
+                    <div className="text-left sm:text-right font-mono text-xs text-slate-300">
+                      <div>No. Registrasi: <strong className="text-amber-400">{selectedJobForPrint.jobNo}</strong></div>
+                      <div>Tgl Dokumen: {selectedJobForPrint.createdAt.slice(0, 10)}</div>
                     </div>
                   </div>
 
-                  {/* 2. JUMLAH OBAT */}
-                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                    <div className="text-[10px] font-bold text-rose-400 uppercase">2. Jumlah Obat yang Digunakan:</div>
-                    <div className="text-base font-mono font-bold text-rose-300">
-                      {formatNumberID(selectedJobForPrint.medicineQuantity)} {selectedJobForPrint.medicineUnit}
+                  {/* 4 DATA POKOK UTAMA FUMIGASI (Format Tabel Resmi) */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>Ringkasan Parameter Perlakuan Fumigasi</span>
                     </div>
-                    <div className="text-slate-400 text-[11px]">
-                      Jenis Bahan Aktif: {selectedJobForPrint.medicineName} {selectedJobForPrint.medicineBatchNo && `(Batch: ${selectedJobForPrint.medicineBatchNo})`}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      {/* 1. NAMA BAHAN BAKU */}
+                      <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase">1. Nama Bahan Baku / Komoditas:</div>
+                        <div className="text-base font-bold text-white">
+                          {selectedJobForPrint.rawMaterialName || selectedJobForPrint.targetObject}
+                        </div>
+                        <div className="text-slate-400 text-[11px]">
+                          Klien: {selectedJobForPrint.clientName} &bull; Lokasi: {selectedJobForPrint.location}
+                        </div>
+                      </div>
+
+                      {/* 2. JUMLAH OBAT */}
+                      <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                        <div className="text-[10px] font-bold text-rose-400 uppercase">2. Jumlah Obat yang Digunakan:</div>
+                        <div className="text-base font-mono font-bold text-rose-300">
+                          {formatNumberID(selectedJobForPrint.medicineQuantity)} {selectedJobForPrint.medicineUnit}
+                        </div>
+                        <div className="text-slate-400 text-[11px]">
+                          Jenis Bahan Aktif: {selectedJobForPrint.medicineName} {selectedJobForPrint.medicineBatchNo && `(Batch: ${selectedJobForPrint.medicineBatchNo})`}
+                        </div>
+                      </div>
+
+                      {/* 3. TANGGAL TUTUP */}
+                      <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                        <div className="text-[10px] font-bold text-blue-400 uppercase">3. Tanggal Tutup (Mulai Fumigasi):</div>
+                        <div className="text-base font-mono font-bold text-blue-200">
+                          {selectedJobForPrint.closingDate || selectedJobForPrint.executionDate}
+                        </div>
+                        <div className="text-slate-400 text-[11px]">
+                          Pemasangan sungkup kedap gas &amp; injeksi fumigan
+                        </div>
+                      </div>
+
+                      {/* 4. TANGGAL BUKA */}
+                      <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                        <div className="text-[10px] font-bold text-amber-400 uppercase">4. Tanggal Buka (Aerasi &amp; Pelepasan Gas):</div>
+                        <div className="text-base font-mono font-bold text-amber-200">
+                          {selectedJobForPrint.openingDate || selectedJobForPrint.aerationDate || '-'}
+                        </div>
+                        <div className="text-slate-400 text-[11px]">
+                          Pembukaan terpal sungkup &amp; ventilasi gas aman
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* 3. TANGGAL TUTUP */}
-                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                    <div className="text-[10px] font-bold text-blue-400 uppercase">3. Tanggal Tutup (Mulai Fumigasi):</div>
-                    <div className="text-base font-mono font-bold text-blue-200">
-                      {selectedJobForPrint.closingDate || selectedJobForPrint.executionDate}
+                  {/* Detail Teknis Tambahan */}
+                  <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase">Waktu Retensi Paparan:</span>
+                      <span className="font-mono font-bold text-white">{selectedJobForPrint.exposureHours || 120} Jam</span>
                     </div>
-                    <div className="text-slate-400 text-[11px]">
-                      Pemasangan sungkup kedap gas &amp; injeksi fumigan
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase">Konsentrasi Gas Terukur:</span>
+                      <span className="font-mono font-bold text-amber-300">{selectedJobForPrint.gasConcentrationPpm || 500} ppm</span>
+                    </div>
+                    {selectedJobForPrint.jobType !== 'FUMIGASI' ? (
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase">BBM Pelarut / Mesin:</span>
+                        <span className="font-medium text-white">{selectedJobForPrint.fuelName ? `${selectedJobForPrint.fuelName} (${selectedJobForPrint.fuelQuantity} ${selectedJobForPrint.fuelUnit || 'L'})` : 'N/A'}</span>
+                      </div>
+                    ) : (
+                      <div>
+                        <span className="text-slate-500 block text-[10px] uppercase">Kondisi Sungkup:</span>
+                        <span className="font-medium text-white truncate block">{selectedJobForPrint.tarpCondition || 'Terpal PVC Kedap Gas Rapat'}</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-slate-500 block text-[10px] uppercase">Target Hama:</span>
+                      <span className="font-medium text-white">{selectedJobForPrint.targetPest || 'Hama Gudang / Kutu'}</span>
                     </div>
                   </div>
 
-                  {/* 4. TANGGAL BUKA */}
-                  <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
-                    <div className="text-[10px] font-bold text-amber-400 uppercase">4. Tanggal Buka (Aerasi &amp; Pelepasan Gas):</div>
-                    <div className="text-base font-mono font-bold text-amber-200">
-                      {selectedJobForPrint.openingDate || selectedJobForPrint.aerationDate || '-'}
+                  {/* Status Rekomendasi & Evaluasi QC */}
+                  <div className="p-4 rounded-xl border bg-slate-900 border-slate-700 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold">
+                      <span className="text-slate-300">HASIL PEMERIKSAAN &amp; REKOMENDASI QUALITY CONTROL (QC):</span>
+                      <span className={`px-2.5 py-0.5 rounded-full font-mono text-xs ${
+                        selectedJobForPrint.qcRecommendation === 'OK'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : selectedJobForPrint.qcRecommendation === 'BELUM_OK'
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                      }`}>
+                        {selectedJobForPrint.qcRecommendation === 'OK'
+                          ? '✓ MEMENUHI STANDAR (OK)'
+                          : selectedJobForPrint.qcRecommendation === 'BELUM_OK'
+                          ? '⚠️ BELUM OK (TINDAKAN LANJUTAN)'
+                          : '❌ WAJIB FUMIGASI ULANG'}
+                      </span>
                     </div>
-                    <div className="text-slate-400 text-[11px]">
-                      Pembukaan terpal sungkup &amp; ventilasi gas aman
+                    <p className="text-xs text-slate-300 italic bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+                      "{selectedJobForPrint.qcRecommendationNotes || 'Hasil inspeksi teknis lapangan memenuhi persyaratan standar perlakuan karantina.'}"
+                    </p>
+                  </div>
+
+                  {/* Signature Block */}
+                  <div className="grid grid-cols-2 gap-8 pt-4 text-xs">
+                    <div className="text-center p-3 rounded-lg border border-slate-800 bg-slate-900/40">
+                      <div className="text-slate-400 text-[10px] uppercase">Teknisi / Operator Pelaksana</div>
+                      <div className="h-14 flex items-end justify-center font-serif text-slate-400 italic">
+                        ( Tanda Tangan Lapangan )
+                      </div>
+                      <div className="font-bold text-white border-t border-slate-800 pt-1 mt-1">
+                        {selectedJobForPrint.operatorName}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono">
+                        {selectedJobForPrint.operatorNip || 'Operator Fumigasi Berlisensi'}
+                      </div>
+                    </div>
+
+                    <div className="text-center p-3 rounded-lg border border-slate-800 bg-slate-900/40">
+                      <div className="text-slate-400 text-[10px] uppercase">Inspektur Quality Control (QC)</div>
+                      <div className="h-14 flex items-end justify-center font-serif text-emerald-400 italic">
+                        [ TERVERIFIKASI SISTEM ]
+                      </div>
+                      <div className="font-bold text-emerald-300 border-t border-slate-800 pt-1 mt-1">
+                        {selectedJobForPrint.qcInspector || 'Ratna Dewi, S.Si'}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-mono">
+                        Badan Karantina ISPM-15 Validator
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Detail Teknis Tambahan */}
-              <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase">Waktu Retensi Paparan:</span>
-                  <span className="font-mono font-bold text-white">{selectedJobForPrint.exposureHours || 120} Jam</span>
-                </div>
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase">Konsentrasi Gas Terukur:</span>
-                  <span className="font-mono font-bold text-amber-300">{selectedJobForPrint.gasConcentrationPpm || 500} ppm</span>
-                </div>
-                {selectedJobForPrint.jobType !== 'FUMIGASI' ? (
-                  <div>
-                    <span className="text-slate-500 block text-[10px] uppercase">BBM Pelarut / Mesin:</span>
-                    <span className="font-medium text-white">{selectedJobForPrint.fuelName ? `${selectedJobForPrint.fuelName} (${selectedJobForPrint.fuelQuantity} ${selectedJobForPrint.fuelUnit || 'L'})` : 'N/A'}</span>
-                  </div>
-                ) : (
-                  <div>
-                    <span className="text-slate-500 block text-[10px] uppercase">Kondisi Sungkup:</span>
-                    <span className="font-medium text-white truncate block">{selectedJobForPrint.tarpCondition || 'Terpal PVC Kedap Gas Rapat'}</span>
-                  </div>
-                )}
-                <div>
-                  <span className="text-slate-500 block text-[10px] uppercase">Target Hama:</span>
-                  <span className="font-medium text-white">{selectedJobForPrint.targetPest || 'Hama Gudang / Kutu'}</span>
-                </div>
-              </div>
-
-              {/* Status Rekomendasi & Evaluasi QC */}
-              <div className="p-4 rounded-xl border bg-slate-900 border-slate-700 space-y-2">
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span className="text-slate-300">HASIL PEMERIKSAAN &amp; REKOMENDASI QUALITY CONTROL (QC):</span>
-                  <span className={`px-2.5 py-0.5 rounded-full font-mono text-xs ${
-                    selectedJobForPrint.qcRecommendation === 'OK'
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                      : selectedJobForPrint.qcRecommendation === 'BELUM_OK'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                  }`}>
-                    {selectedJobForPrint.qcRecommendation === 'OK'
-                      ? '✓ MEMENUHI STANDAR (OK)'
-                      : selectedJobForPrint.qcRecommendation === 'BELUM_OK'
-                      ? '⚠️ BELUM OK (TINDAKAN LANJUTAN)'
-                      : '❌ WAJIB FUMIGASI ULANG'}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-300 italic bg-slate-950 p-2.5 rounded-lg border border-slate-800">
-                  "{selectedJobForPrint.qcRecommendationNotes || 'Hasil inspeksi teknis lapangan memenuhi persyaratan standar perlakuan karantina.'}"
-                </p>
-              </div>
-
-              {/* Signature Block */}
-              <div className="grid grid-cols-2 gap-8 pt-4 text-xs">
-                <div className="text-center p-3 rounded-lg border border-slate-800 bg-slate-900/40">
-                  <div className="text-slate-400 text-[10px] uppercase">Teknisi / Operator Pelaksana</div>
-                  <div className="h-14 flex items-end justify-center font-serif text-slate-400 italic">
-                    ( Tanda Tangan Lapangan )
-                  </div>
-                  <div className="font-bold text-white border-t border-slate-800 pt-1 mt-1">
-                    {selectedJobForPrint.operatorName}
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono">
-                    {selectedJobForPrint.operatorNip || 'Operator Fumigasi Berlisensi'}
-                  </div>
-                </div>
-
-                <div className="text-center p-3 rounded-lg border border-slate-800 bg-slate-900/40">
-                  <div className="text-slate-400 text-[10px] uppercase">Inspektur Quality Control (QC)</div>
-                  <div className="h-14 flex items-end justify-center font-serif text-emerald-400 italic">
-                    [ TERVERIFIKASI SISTEM ]
-                  </div>
-                  <div className="font-bold text-emerald-300 border-t border-slate-800 pt-1 mt-1">
-                    {selectedJobForPrint.qcInspector || 'Ratna Dewi, S.Si'}
-                  </div>
-                  <div className="text-[10px] text-slate-500 font-mono">
-                    Badan Karantina ISPM-15 Validator
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
@@ -1935,181 +2074,592 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                 </div>
               </div>
 
-              {/* 4 PILAR UTAMA INPUT */}
-              <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-4">
-                <div className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2">
-                  <Package className="w-4 h-4" />
-                  4 Data Pokok Pekerjaan (Wajib Terisi)
-                </div>
-
-                {/* 1. Nama Bahan Baku */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center gap-1.5">
-                    <Package className="w-3.5 h-3.5 text-amber-400" />
-                    1. Nama Bahan Baku / Komoditas <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={editRawMaterialName}
-                    onChange={(e) => setEditRawMaterialName(e.target.value)}
-                    placeholder="Contoh: Beras Premium, Jagung Pakan, Kedelai Impor, Tembakau Ekspor..."
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
-                  {/* Quick Suggestions */}
-                  <div className="flex items-center gap-1.5 flex-wrap mt-2">
-                    <span className="text-[10px] text-slate-500 font-medium">Pilihan Cepat:</span>
-                    {['Beras Premium', 'Jagung Pakan', 'Kedelai Impor', 'Tembakau Ekspor', 'Tepung Terigu', 'Gandum Bulk'].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setEditRawMaterialName(preset)}
-                        className="px-2 py-0.5 rounded text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 2 & 3. Tanggal Tutup & Tanggal Buka */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-rose-400" />
-                      2. Tanggal Tutup (Injeksi Gas) <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={editClosingDate}
-                      onChange={(e) => setEditClosingDate(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    />
-                    <span className="text-[10px] text-slate-500 mt-1 block">Waktu sungkup ditutup rapat</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center gap-1.5">
-                      <Unlock className="w-3.5 h-3.5 text-emerald-400" />
-                      3. Tanggal Buka (Aerasi / Pelepasan) <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={editOpeningDate}
-                      onChange={(e) => setEditOpeningDate(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    />
-                    <span className="text-[10px] text-slate-500 mt-1 block">Waktu sungkup dibuka &amp; aerasi</span>
-                  </div>
-                </div>
-
-                {/* 4. Dosis Obat & Nama Obat */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                    <Beaker className="w-3.5 h-3.5 text-blue-400" />
-                    4. Jumlah Dosis Obat &amp; Jenis Formula <span className="text-rose-400">*</span>
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="sm:col-span-1">
-                      <label className="block text-[11px] text-slate-400 mb-1">Jumlah Dosis:</label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={editMedicineQuantity}
-                        onChange={(e) => setEditMedicineQuantity(e.target.value)}
-                        placeholder="Contoh: 1500"
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono font-bold text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
+              {/* Toggle Jenis Pekerjaan untuk Edit */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Jenis Pekerjaan Lapangan:
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditJobType('FUMIGASI');
+                      if (!editFumigantName) setEditFumigantName(editMedicineName || 'Quickphos 56 TB');
+                      if (!editControlType) setEditControlType('Fumigasi (Gassing) Cover Sheet');
+                      if (!editWarehouseSupervisorName) setEditWarehouseSupervisorName('RM WH Supervisor');
+                      if (!editQcSupervisorName) setEditQcSupervisorName('QC Supervisor');
+                      if (!editTonnage) setEditTonnage('1.250 Ton');
+                      if (!editWarehouseKavling) setEditWarehouseKavling(editLocation || 'Gudang 03 / Kavling K-04');
+                    }}
+                    className={`p-3 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all ${
+                      editJobType === 'FUMIGASI'
+                        ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 ring-2 ring-indigo-500/30 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400">
+                      <Flame className="w-4 h-4" />
                     </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">Satuan Dosis:</label>
-                      <select
-                        value={editMedicineUnit}
-                        onChange={(e) => setEditMedicineUnit(e.target.value)}
-                        className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      >
-                        <option value="Tablet">Tablet</option>
-                        <option value="Gram">Gram</option>
-                        <option value="Kg">Kg</option>
-                        <option value="Liter">Liter</option>
-                        <option value="Pellet">Pellet</option>
-                        <option value="Canister">Canister</option>
-                        <option value="Botol">Botol</option>
-                      </select>
+                    <div className="text-left">
+                      <div className="text-xs font-bold text-white">Fumigasi (JAPFA)</div>
+                      <div className="text-[10px] text-slate-400">PLT-WRH-FM 01-09</div>
                     </div>
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">Nama Formulasi Obat:</label>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditJobType('SPRAYING_FOGGING');
+                    }}
+                    className={`p-3 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all ${
+                      editJobType === 'SPRAYING_FOGGING'
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 ring-2 ring-emerald-500/30 font-bold'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
+                      <Bug className="w-4 h-4" />
+                    </div>
+                    <div className="text-left">
+                      <div className="text-xs font-bold text-white">Spraying &amp; Fogging</div>
+                      <div className="text-[10px] text-slate-400">Pengendalian Vektor Hama</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* EDIT FORM: JAPFA BERITA ACARA PLT-WRH-FM 01-09 vs SPRAYING & FOGGING */}
+              {editJobType === 'FUMIGASI' ? (
+                <div className="space-y-4">
+                  {/* Header Form JAPFA */}
+                  <div className="p-4 rounded-xl bg-slate-950 border border-indigo-500/40 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-500 font-black text-sm">JAPFA</span>
+                        <span className="text-xs font-bold text-white">PT. JAPFA COMFEED INDONESIA Tbk</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Unit Lampung
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-mono font-bold text-amber-300 border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 rounded">
+                          PLT-WRH-FM 01-09
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Pembuka: Pada hari : ... Tanggal : ... telah dilakukan Pengendalian hama: */}
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 flex flex-wrap items-center gap-2">
+                      <span>Pada hari :</span>
                       <input
                         type="text"
-                        value={editMedicineName}
-                        onChange={(e) => setEditMedicineName(e.target.value)}
-                        placeholder="Contoh: Phostoxin 56 TB"
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        value={editExecutionDay}
+                        onChange={(e) => setEditExecutionDay(e.target.value)}
+                        placeholder="Hari..."
+                        className="px-2.5 py-1 rounded bg-slate-950 border border-slate-700 text-amber-300 font-bold text-xs w-28 text-center"
+                      />
+                      <span>Tanggal :</span>
+                      <input
+                        type="date"
+                        value={editClosingDate}
+                        onChange={(e) => {
+                          setEditClosingDate(e.target.value);
+                          setEditExecutionDay(getDayNameIndo(e.target.value));
+                        }}
+                        required
+                        className="px-2.5 py-1 rounded bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                      />
+                      <span className="text-slate-400 sm:ml-auto">telah dilakukan Pengendalian hama:</span>
+                    </div>
+
+                    {/* 8 Field Form Sesuai Dokumen JAPFA */}
+                    <div className="space-y-2 text-xs">
+                      {/* 1. Tanggal Permintaan */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                          <span>1. Tanggal Permintaan</span>
+                          <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                        </label>
+                        <div className="sm:col-span-8">
+                          <input
+                            type="date"
+                            value={editRequestDate}
+                            onChange={(e) => setEditRequestDate(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 2. Nama Bahan Baku */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                          <span>2. Nama Bahan Baku</span>
+                          <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                        </label>
+                        <div className="sm:col-span-8 space-y-1">
+                          <input
+                            type="text"
+                            value={editRawMaterialName}
+                            onChange={(e) => setEditRawMaterialName(e.target.value)}
+                            placeholder="Contoh: Jagung Pipil Pakan Ternak, Soybean Meal, Beras..."
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs font-semibold"
+                          />
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {['Jagung Pipil Pakan Ternak', 'Soybean Meal (SBM)', 'Wheat Pollard', 'Corn Gluten Meal', 'Beras Super'].map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setEditRawMaterialName(preset)}
+                                className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700"
+                              >
+                                {preset}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3. Batch */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                          <span>3. Batch</span>
+                          <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                        </label>
+                        <div className="sm:col-span-8">
+                          <input
+                            type="text"
+                            value={editRawMaterialBatch}
+                            onChange={(e) => setEditRawMaterialBatch(e.target.value)}
+                            placeholder="Contoh: BATCH-JPF-2026-088"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-amber-300 font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 4. Tonase */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                          <span>4. Tonase</span>
+                          <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                        </label>
+                        <div className="sm:col-span-8">
+                          <input
+                            type="text"
+                            value={editTonnage}
+                            onChange={(e) => setEditTonnage(e.target.value)}
+                            placeholder="Contoh: 1.250 Ton / 500 Ton"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 5. Gudang/ Kavling */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                          <span>5. Gudang/ Kavling</span>
+                          <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                        </label>
+                        <div className="sm:col-span-8">
+                          <input
+                            type="text"
+                            value={editWarehouseKavling}
+                            onChange={(e) => setEditWarehouseKavling(e.target.value)}
+                            placeholder="Contoh: Gudang 03 / Kavling K-04"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 6. Nama Fumigan */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                          <span>6. Nama Fumigan</span>
+                          <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                        </label>
+                        <div className="sm:col-span-8">
+                          <input
+                            type="text"
+                            value={editFumigantName}
+                            onChange={(e) => setEditFumigantName(e.target.value)}
+                            placeholder="Contoh: Quickphos 56 TB / Phostoxin"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 7. Jumlah Fumigan */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                          <span>7. Jumlah Fumigan</span>
+                          <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                        </label>
+                        <div className="sm:col-span-8 flex items-center gap-2">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0.1"
+                            value={editMedicineQuantity}
+                            onChange={(e) => setEditMedicineQuantity(e.target.value)}
+                            placeholder="0"
+                            className="w-32 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-rose-300 font-bold font-mono text-xs"
+                          />
+                          <select
+                            value={editMedicineUnit}
+                            onChange={(e) => setEditMedicineUnit(e.target.value)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                          >
+                            <option value="Tablet">Tablet</option>
+                            <option value="Flask">Flask</option>
+                            <option value="Pellet">Pellet</option>
+                            <option value="Canister">Canister</option>
+                            <option value="Kg">Kg</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* 8. Jenis Pengendalian */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                          <span>8. Jenis Pengendalian</span>
+                          <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                        </label>
+                        <div className="sm:col-span-8">
+                          <input
+                            type="text"
+                            value={editControlType}
+                            onChange={(e) => setEditControlType(e.target.value)}
+                            placeholder="Contoh: Fumigasi (Gassing) Cover Sheet"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Buka Plastik Cover Sheet Notice */}
+                    <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/30 space-y-2 text-xs">
+                      <div className="font-semibold text-indigo-200 flex flex-wrap items-center gap-2">
+                        <span>Fumigasi (Gassing) akan dibuka plastik cover sheet pada hari :</span>
+                        <input
+                          type="text"
+                          value={editOpeningDay}
+                          onChange={(e) => setEditOpeningDay(e.target.value)}
+                          placeholder="Hari..."
+                          className="px-2.5 py-1 rounded bg-slate-950 border border-slate-700 text-amber-300 font-bold text-xs w-28 text-center"
+                        />
+                        <span>tanggal :</span>
+                        <input
+                          type="date"
+                          value={editOpeningDate}
+                          onChange={(e) => {
+                            setEditOpeningDate(e.target.value);
+                            setEditOpeningDay(getDayNameIndo(e.target.value));
+                          }}
+                          required
+                          className="px-2.5 py-1 rounded bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <p className="italic text-slate-400 text-[11px]">
+                        Demikian berita acara ini kami buat untuk dapat dipergunakan sebagaimana mestinya
+                      </p>
+                    </div>
+
+                    {/* Parameter Gas & Sungkup */}
+                    <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5 text-xs">
+                      <div className="font-bold text-indigo-300 text-[11px] uppercase tracking-wider">
+                        Parameter Gas &amp; Sungkup Karantina:
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-slate-400 text-[11px] mb-1">Target Konsentrasi PH3 (ppm):</label>
+                          <input
+                            type="number"
+                            value={editGasConcentrationPpm}
+                            onChange={(e) => setEditGasConcentrationPpm(e.target.value)}
+                            placeholder="e.g. 500"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-400 text-[11px] mb-1">Durasi Paparan (Jam):</label>
+                          <input
+                            type="number"
+                            value={editExposureHours}
+                            onChange={(e) => setEditExposureHours(e.target.value)}
+                            placeholder="e.g. 120"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-slate-400 text-[11px] mb-1">Kondisi Sungkup Terpal &amp; Sand Snake:</label>
+                        <input
+                          type="text"
+                          value={editTarpCondition}
+                          onChange={(e) => setEditTarpCondition(e.target.value)}
+                          placeholder="Kondisi sungkup terpal PVC, sand snake..."
+                          className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Personil & Tanda Tangan */}
+                    <div className="pt-2 border-t border-slate-800 space-y-2 text-xs">
+                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        Personil Penandatangan:
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">
+                            Dibuat Oleh: <strong>Fimigation Opr</strong>
+                          </label>
+                          <input
+                            type="text"
+                            value={editOperatorName}
+                            onChange={(e) => setEditOperatorName(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">
+                            Dibuat Oleh: <strong>RM WH Supervisor</strong>
+                          </label>
+                          <input
+                            type="text"
+                            value={editWarehouseSupervisorName}
+                            onChange={(e) => setEditWarehouseSupervisorName(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">
+                            Mengetahui: <strong>QC Supervisor</strong>
+                          </label>
+                          <input
+                            type="text"
+                            value={editQcSupervisorName}
+                            onChange={(e) => setEditQcSupervisorName(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Catatan Tambahan:</label>
+                    <textarea
+                      rows={2}
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      placeholder="Catatan kondisi sungkup terpal, K3, atau kendala lapangan..."
+                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* SPRAYING / FOGGING EDIT FORM */
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-slate-950/80 border border-emerald-500/30 space-y-4">
+                    <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-2">
+                      <Bug className="w-4 h-4 text-emerald-400" />
+                      Lembar Kerja Spraying &amp; Fogging (Pengendalian Vektor)
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-200 mb-1.5 flex items-center gap-1.5">
+                        <Package className="w-3.5 h-3.5 text-emerald-400" />
+                        Area / Sasaran Pengendalian Vektor <span className="text-rose-400">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={editRawMaterialName}
+                        onChange={(e) => setEditRawMaterialName(e.target.value)}
+                        placeholder="Contoh: Dinding Perimeter Luar, Saluran Air, Gudang Silo..."
+                        className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-200 mb-1.5">
+                          Tanggal Pelaksanaan <span className="text-rose-400">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={editClosingDate}
+                          onChange={(e) => setEditClosingDate(e.target.value)}
+                          className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-200 mb-1.5">
+                          Tanggal Selesai Evaluasi
+                        </label>
+                        <input
+                          type="date"
+                          value={editOpeningDate}
+                          onChange={(e) => setEditOpeningDate(e.target.value)}
+                          className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Dosis Insektisida */}
+                    <div className="space-y-2 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                      <label className="block text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                        <Beaker className="w-3.5 h-3.5 text-rose-400" />
+                        Jumlah Dosis Insektisida &amp; Formula <span className="text-rose-400">*</span>
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div className="sm:col-span-1">
+                          <label className="block text-[11px] text-slate-400 mb-1">Jumlah Dosis:</label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={editMedicineQuantity}
+                            onChange={(e) => setEditMedicineQuantity(e.target.value)}
+                            placeholder="Contoh: 1500"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-rose-300 font-mono font-bold text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Satuan Dosis:</label>
+                          <select
+                            value={editMedicineUnit}
+                            onChange={(e) => setEditMedicineUnit(e.target.value)}
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                          >
+                            <option value="Liter">Liter</option>
+                            <option value="Botol">Botol</option>
+                            <option value="Gram">Gram</option>
+                            <option value="Kg">Kg</option>
+                            <option value="Tablet">Tablet</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Nama Insektisida:</label>
+                          <input
+                            type="text"
+                            value={editMedicineName}
+                            onChange={(e) => setEditMedicineName(e.target.value)}
+                            placeholder="Contoh: Icon 25 EC / Cynoff 50 EC"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Pemakaian BBM Mesin Fogger */}
+                    <div className="space-y-2 p-3 rounded-xl bg-slate-900/60 border border-amber-500/30">
+                      <label className="block text-xs font-semibold text-amber-300 flex items-center gap-1.5">
+                        <Fuel className="w-3.5 h-3.5 text-amber-400" />
+                        Pemakaian BBM &amp; Pelarut Mesin Fogger
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Jenis BBM / Pelarut:</label>
+                          <input
+                            type="text"
+                            value={editFuelName}
+                            onChange={(e) => setEditFuelName(e.target.value)}
+                            placeholder="Contoh: Solar Dex / Pertamax"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-amber-300 text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] text-slate-400 mb-1">Jumlah Liter BBM:</label>
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            value={editFuelQuantity}
+                            onChange={(e) => setEditFuelQuantity(e.target.value)}
+                            placeholder="Contoh: 15 (Liter)"
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-amber-300 font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800 space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Klien / Perusahaan:</label>
+                        <input
+                          type="text"
+                          value={editClientName}
+                          onChange={(e) => setEditClientName(e.target.value)}
+                          placeholder="Nama PT / Klien..."
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Lokasi / Gudang / Pabrik:</label>
+                        <input
+                          type="text"
+                          value={editLocation}
+                          onChange={(e) => setEditLocation(e.target.value)}
+                          placeholder="Contoh: Pabrik Pakan Unit A..."
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Target Hama Sasaran:</label>
+                        <input
+                          type="text"
+                          value={editTargetPest}
+                          onChange={(e) => setEditTargetPest(e.target.value)}
+                          placeholder="Contoh: Nyamuk Culex, Lalat Musca..."
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Teknisi / Operator Fogger:</label>
+                        <input
+                          type="text"
+                          value={editOperatorName}
+                          onChange={(e) => setEditOperatorName(e.target.value)}
+                          placeholder="Nama Operator..."
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Durasi Kerja Mesin (Jam):</label>
+                        <input
+                          type="number"
+                          value={editExposureHours}
+                          onChange={(e) => setEditExposureHours(e.target.value)}
+                          placeholder="Contoh: 4 (Jam)"
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Kondisi Cuaca &amp; Area:</label>
+                        <input
+                          type="text"
+                          value={editTarpCondition}
+                          onChange={(e) => setEditTarpCondition(e.target.value)}
+                          placeholder="Angin tenang, cuaca cerah..."
+                          className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] text-slate-400 mb-1">Catatan Tambahan &amp; K3:</label>
+                      <textarea
+                        rows={2}
+                        value={editNotes}
+                        onChange={(e) => setEditNotes(e.target.value)}
+                        placeholder="Kondisi knockdown, masker respirator gas, atau catatan teknis..."
+                        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
                       />
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Data Pendukung / Lapangan Tambahan */}
-              <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800 space-y-3">
-                <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Informasi Tambahan Pekerjaan
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Klien / Perusahaan:</label>
-                    <input
-                      type="text"
-                      value={editClientName}
-                      onChange={(e) => setEditClientName(e.target.value)}
-                      placeholder="Nama PT / Klien..."
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Lokasi / Gudang:</label>
-                    <input
-                      type="text"
-                      value={editLocation}
-                      onChange={(e) => setEditLocation(e.target.value)}
-                      placeholder="Contoh: Gudang B-03..."
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Target Hama:</label>
-                    <input
-                      type="text"
-                      value={editTargetPest}
-                      onChange={(e) => setEditTargetPest(e.target.value)}
-                      placeholder="Contoh: Sitophilus oryzae..."
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Judul / Deskripsi SPK:</label>
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      placeholder="Deskripsi SPK..."
-                      className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Catatan Lapangan:</label>
-                  <textarea
-                    rows={2}
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                    placeholder="Kondisi sungkup plastik, kelembaban, atau catatan teknis..."
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Modal Footer */}
@@ -2150,6 +2700,86 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                   <span>Simpan Perubahan</span>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Hapus Semua Laporan Pekerjaan */}
+      {showDeleteAllModal && onDeleteAllJobReports && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-2xl max-w-md w-full shadow-2xl p-6 text-slate-100 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-3 rounded-xl bg-rose-500/20 text-rose-400 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Konfirmasi Hapus Semua Laporan</h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Tindakan ini akan menghapus data laporan pekerjaan dari database Firebase Firestore secara permanen.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 space-y-2">
+              <label className="text-xs font-semibold text-slate-300 block">Pilih Cakupan Penghapusan:</label>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer p-1.5 rounded hover:bg-slate-800/50">
+                  <input
+                    type="radio"
+                    name="reportScope"
+                    checked={deleteAllScope === 'ALL'}
+                    onChange={() => setDeleteAllScope('ALL')}
+                    className="text-rose-500 focus:ring-rose-500"
+                  />
+                  <span>Semua Laporan (Fumigasi + Spraying &amp; Fogging)</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer p-1.5 rounded hover:bg-slate-800/50">
+                  <input
+                    type="radio"
+                    name="reportScope"
+                    checked={deleteAllScope === 'FUMIGASI'}
+                    onChange={() => setDeleteAllScope('FUMIGASI')}
+                    className="text-rose-500 focus:ring-rose-500"
+                  />
+                  <span>Hanya Laporan Fumigasi Saja</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-slate-200 cursor-pointer p-1.5 rounded hover:bg-slate-800/50">
+                  <input
+                    type="radio"
+                    name="reportScope"
+                    checked={deleteAllScope === 'SPRAYING_FOGGING'}
+                    onChange={() => setDeleteAllScope('SPRAYING_FOGGING')}
+                    className="text-rose-500 focus:ring-rose-500"
+                  />
+                  <span>Hanya Laporan Spraying &amp; Fogging Saja</span>
+                </label>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-rose-400 font-medium">
+              ⚠️ Perhatian: Data laporan yang dihapus tidak dapat dipulihkan kembali. Pastikan telah mengekspor CSV terlebih dahulu jika memerlukan arsip.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowDeleteAllModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onDeleteAllJobReports(deleteAllScope === 'ALL' ? undefined : deleteAllScope);
+                  setShowDeleteAllModal(false);
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-all shadow-lg shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Ya, Hapus Semua</span>
+              </button>
             </div>
           </div>
         </div>

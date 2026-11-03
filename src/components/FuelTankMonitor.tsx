@@ -1,16 +1,84 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { InventoryItem } from '../types/inventory';
-import { Fuel, AlertTriangle, ArrowUpRight, ArrowDownRight, Droplet, Gauge } from 'lucide-react';
+import {
+  Fuel,
+  AlertTriangle,
+  ArrowUpRight,
+  ArrowDownRight,
+  Edit2,
+  Save,
+  X,
+  CheckCircle2,
+  Sliders,
+  Warehouse,
+  Sparkles,
+} from 'lucide-react';
 import { formatNumberID } from '../utils/formatters';
 import { getMinThreshold, isBelowMinimumThreshold } from '../utils/stockUtils';
 
 interface FuelTankMonitorProps {
   items: InventoryItem[];
   onQuickAction: (item: InventoryItem, actionType: 'IN' | 'OUT') => void;
+  onUpdateTankCapacity?: (itemId: string, newCapacity: number, newMinThreshold?: number, locationName?: string) => void;
+  canEditCapacity?: boolean;
 }
 
-export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({ items, onQuickAction }) => {
+export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({
+  items,
+  onQuickAction,
+  onUpdateTankCapacity,
+  canEditCapacity = true,
+}) => {
   const fuelItems = items.filter((item) => item.category === 'BBM' && item.isFuel);
+
+  // Edit Capacity Modal State
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [capacityInput, setCapacityInput] = useState<string>('');
+  const [thresholdInput, setThresholdInput] = useState<string>('');
+  const [locationInput, setLocationInput] = useState<string>('');
+
+  const handleOpenEdit = (item: InventoryItem) => {
+    setEditingItem(item);
+    const currentCap = item.tankCapacity || (item.currentStock > 1000 ? 5000 : 1000);
+    setCapacityInput(String(currentCap));
+    setThresholdInput(String(getMinThreshold(item)));
+    setLocationInput(item.location || '');
+  };
+
+  const handleSaveCapacity = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    const newCap = parseFloat(capacityInput);
+    if (isNaN(newCap) || newCap <= 0) return;
+
+    const newThresh = thresholdInput ? parseFloat(thresholdInput) : undefined;
+    const newLoc = locationInput.trim() || undefined;
+
+    if (onUpdateTankCapacity) {
+      onUpdateTankCapacity(editingItem.id, newCap, newThresh, newLoc);
+    }
+    setEditingItem(null);
+  };
+
+  // Quick capacity presets depending on fuel type
+  const isEditingSolar = editingItem
+    ? editingItem.sku.includes('SLR') || editingItem.name.toLowerCase().includes('solar')
+    : false;
+  const isEditingPertamax = editingItem
+    ? editingItem.sku.includes('PTX') || editingItem.name.toLowerCase().includes('pertamax')
+    : false;
+
+  const presets = isEditingSolar
+    ? [2500, 5000, 7500, 10000]
+    : isEditingPertamax
+    ? [500, 1000, 2000, 3000]
+    : [1000, 2500, 5000, 10000];
+
+  const parsedCap = parseFloat(capacityInput) || 0;
+  const previewStock = editingItem?.currentStock || 0;
+  const previewPercent = parsedCap > 0 ? Math.min(100, Math.round((previewStock / parsedCap) * 100)) : 0;
+  const previewSpace = parsedCap > 0 ? Math.max(0, parsedCap - previewStock) : 0;
 
   return (
     <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-lg">
@@ -31,8 +99,11 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({ items, onQuick
             </p>
           </div>
         </div>
-        <div className="text-xs text-slate-400 font-mono">
-          Threshold Alert: <span className="text-amber-400 font-semibold">Min 20%</span>
+        <div className="flex items-center gap-2 text-xs font-mono">
+          <span className="text-slate-400">Threshold Alert:</span>
+          <span className="text-amber-400 font-semibold px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30">
+            Min 20%
+          </span>
         </div>
       </div>
 
@@ -53,22 +124,22 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({ items, onQuick
           return (
             <div
               key={item.id}
-              className="bg-slate-950/70 border border-slate-800 rounded-lg p-4 flex flex-col justify-between hover:border-slate-700 transition-colors"
+              className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition-colors shadow-sm"
             >
               {/* Header Info */}
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
-                    <span>{item.sku}</span>
+                    <span className="font-bold text-amber-400">{item.sku}</span>
                     <span aria-hidden="true">·</span>
-                    <span>{item.location}</span>
+                    <span className="truncate max-w-[180px]">{item.location}</span>
                   </div>
-                  <h3 className="text-sm font-semibold text-slate-100 mt-0.5">
+                  <h3 className="text-sm font-bold text-slate-100 mt-0.5">
                     {item.name}
                   </h3>
                 </div>
 
-                <div className="text-right">
+                <div className="flex items-center gap-1.5">
                   <div
                     className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium font-mono border ${
                       isCritical
@@ -95,6 +166,18 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({ items, onQuick
                       </>
                     )}
                   </div>
+
+                  {/* Direct Edit Button in Header */}
+                  {canEditCapacity && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(item)}
+                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 border border-slate-700 transition-colors cursor-pointer"
+                      title={`Edit kapasitas ${item.name}`}
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -144,8 +227,22 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({ items, onQuick
                           {item.unit}
                         </span>
                       </div>
-                      <div className="text-xs text-slate-400">
-                        Kapasitas Tangki: {formatNumberID(capacity)} Liter
+                      <div className="flex items-center gap-1.5 text-xs text-slate-300 mt-0.5">
+                        <span>Kapasitas Tangki:</span>
+                        <strong className="text-amber-400 font-mono font-bold">
+                          {formatNumberID(capacity)} Liter
+                        </strong>
+                        {canEditCapacity && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-500/10 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
+                            title="Edit kapasitas tangki"
+                          >
+                            <Edit2 className="w-2.5 h-2.5" />
+                            <span>Ubah</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
@@ -182,10 +279,22 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({ items, onQuick
 
               {/* Action Buttons */}
               <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                {canEditCapacity && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(item)}
+                    className="flex items-center justify-center gap-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                    title={`Edit kapasitas tangki ${isSolar ? 'Solar' : 'Pertamax'}`}
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Edit Kapasitas</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => onQuickAction(item, 'IN')}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-medium transition-colors cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-medium transition-colors cursor-pointer"
                 >
                   <ArrowDownRight className="w-3.5 h-3.5" />
                   Isi / Terima BBM
@@ -193,7 +302,7 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({ items, onQuick
                 <button
                   type="button"
                   onClick={() => onQuickAction(item, 'OUT')}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30 text-xs font-medium transition-colors cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 text-xs font-medium transition-colors cursor-pointer"
                 >
                   <ArrowUpRight className="w-3.5 h-3.5" />
                   Pakai / Dispense
@@ -203,6 +312,168 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({ items, onQuick
           );
         })}
       </div>
+
+      {/* ================= MODAL: EDIT KAPASITAS TANGKI BBM ================= */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden text-slate-100 space-y-0">
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    Edit Kapasitas Tangki BBM
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {editingItem.name} ({editingItem.sku})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveCapacity} className="p-5 space-y-4">
+              {/* Info Banner */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Stok Fisik Saat Ini:</span>
+                  <span className="text-base font-bold font-mono text-emerald-400">
+                    {formatNumberID(editingItem.currentStock)} Liter
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-400 block text-[11px]">Kapasitas Sekarang:</span>
+                  <span className="text-sm font-bold font-mono text-amber-400">
+                    {formatNumberID(editingItem.tankCapacity || (editingItem.currentStock > 1000 ? 5000 : 1000))} Liter
+                  </span>
+                </div>
+              </div>
+
+              {/* Input Kapasitas Baru */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-200 mb-1.5">
+                  Kapasitas Tangki Baru (Liter) <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={capacityInput}
+                    onChange={(e) => setCapacityInput(e.target.value)}
+                    required
+                    min="1"
+                    step="1"
+                    placeholder="Contoh: 5000"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-white font-mono font-bold text-base focus:outline-none focus:border-amber-500 pr-16"
+                  />
+                  <span className="absolute right-3.5 top-3 text-xs font-mono text-slate-400">
+                    Liter
+                  </span>
+                </div>
+
+                {/* Preset Buttons */}
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  <span className="text-[11px] text-slate-400 mr-1">Preset Cepat:</span>
+                  {presets.map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setCapacityInput(String(val))}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                        parseInt(capacityInput) === val
+                          ? 'bg-amber-500 text-slate-950 shadow'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700'
+                      }`}
+                    >
+                      {formatNumberID(val)} L
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Ambang Batas Minimum */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-200 mb-1.5">
+                  Ambang Batas Minimum Restock Alert (Liter)
+                </label>
+                <input
+                  type="number"
+                  value={thresholdInput}
+                  onChange={(e) => setThresholdInput(e.target.value)}
+                  min="0"
+                  step="1"
+                  placeholder="Contoh: 1000"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Peringatan stok menipis otomatis aktif jika isi tangki &le; nilai ini (default: 20% kapasitas).
+                </p>
+              </div>
+
+              {/* Nama Lokasi / Tangki */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-200 mb-1.5">
+                  Label Lokasi / Nama Tangki
+                </label>
+                <input
+                  type="text"
+                  value={locationInput}
+                  onChange={(e) => setLocationInput(e.target.value)}
+                  placeholder="Contoh: Tangki Utama T-01 (Kapasitas 5.000 L)"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Live Preview Bar */}
+              {parsedCap > 0 && (
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-slate-400">Pratinjau Level Tangki:</span>
+                    <span className="font-bold text-amber-400">{previewPercent}% Terisi</span>
+                  </div>
+                  <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all rounded-full"
+                      style={{ width: `${Math.min(100, previewPercent)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] font-mono text-slate-400 pt-1">
+                    <span>Stok: {formatNumberID(previewStock)} L</span>
+                    <span>Sisa Ruang Kosong: <strong className="text-slate-200">{formatNumberID(previewSpace)} L</strong></span>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Kapasitas Tangki</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

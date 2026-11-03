@@ -19,7 +19,7 @@ import {
   ShieldAlert,
   Sparkles,
 } from 'lucide-react';
-import { formatNumberID } from '../utils/formatters';
+import { formatNumberID, getDayNameIndo } from '../utils/formatters';
 
 interface OperatorJobInputModalProps {
   isOpen: boolean;
@@ -57,8 +57,18 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
   const [clientName, setClientName] = useState<string>('');
   const [location, setLocation] = useState<string>('');
 
-  // Spesifikasi Wajib Laporan Fumigasi: Bahan Baku, Tanggal Tutup & Buka
-  const [rawMaterialName, setRawMaterialName] = useState<string>('');
+  // Spesifikasi Wajib Berita Acara Pengendalian Hama (PLT-WRH-FM 01-09) PT. JAPFA COMFEED INDONESIA Tbk - Unit Lampung
+  const [requestDate, setRequestDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [rawMaterialName, setRawMaterialName] = useState<string>('Jagung Pipil Pakan Ternak');
+  const [rawMaterialBatch, setRawMaterialBatch] = useState<string>('BATCH-JPF-2026-088');
+  const [tonnage, setTonnage] = useState<string>('1.250 Ton');
+  const [warehouseKavling, setWarehouseKavling] = useState<string>('Gudang 03 / Kavling K-04');
+  const [controlType, setControlType] = useState<string>('Fumigasi (Gassing) Cover Sheet');
+  const [executionDay, setExecutionDay] = useState<string>('');
+  const [openingDay, setOpeningDay] = useState<string>('');
+  const [warehouseSupervisorName, setWarehouseSupervisorName] = useState<string>('Agus Pranoto');
+  const [qcSupervisorName, setQcSupervisorName] = useState<string>('Ratna Dewi, S.Si');
+
   const [closingDate, setClosingDate] = useState<string>(new Date().toISOString().slice(0, 10));
   const [openingDate, setOpeningDate] = useState<string>(() => {
     const d = new Date();
@@ -90,16 +100,19 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
   // Error validation
   const [errorMessage, setErrorMessage] = useState<string>('');
 
+  // Ref to track modal open state so useEffect only initializes once per opening
+  const prevIsOpenRef = React.useRef(false);
+
   // Filter available medicines & fuels from inventory
   const availableMedicines = items.filter((i) =>
     jobType === 'FUMIGASI' ? i.category === 'FUMIGASI' : i.category === 'SPRAYING_FOGGING'
   );
   const availableFuels = items.filter((i) => i.category === 'BBM');
 
-  // Auto-generate SPK number or prefill from recommendation
+  // Auto-generate SPK number or prefill from recommendation ONCE when opening modal
   useEffect(() => {
-    if (isOpen) {
-      const activeType = initialRecommendation ? 'FUMIGASI' : (initialJobType || jobType);
+    if (isOpen && !prevIsOpenRef.current) {
+      const activeType = initialRecommendation ? 'FUMIGASI' : (initialJobType || 'FUMIGASI');
       setJobType(activeType);
       const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, '').slice(2);
       const randomNum = Math.floor(100 + Math.random() * 900);
@@ -110,12 +123,21 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
 
       if (initialRecommendation) {
         setJobType('FUMIGASI');
-        setTitle(`Fumigasi ${initialRecommendation.commodityName} (${initialRecommendation.batchOrLotNo})`);
-        setClientName('Bagian Pergudangan & Silo Bahan Baku');
-        setLocation(initialRecommendation.location);
+        setTitle(`Berita Acara Pengendalian Hama Fumigasi ${initialRecommendation.commodityName}`);
+        setClientName('PT. JAPFA COMFEED INDONESIA Tbk - Unit Lampung');
+        setLocation(initialRecommendation.location || 'Gudang 03 / Kavling K-04');
         setRawMaterialName(initialRecommendation.commodityName);
-        setClosingDate(new Date().toISOString().slice(0, 10));
-        setOpeningDate(initialRecommendation.targetFumigationDeadline || new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10));
+        setRequestDate(initialRecommendation.inspectionDate || new Date().toISOString().slice(0, 10));
+        setRawMaterialBatch(initialRecommendation.batchOrLotNo || 'BATCH-JPF-2026-088');
+        setTonnage(`${initialRecommendation.quantity} ${initialRecommendation.quantityUnit}`);
+        setWarehouseKavling(initialRecommendation.location || 'Gudang 03 / Kavling K-04');
+        setControlType('Fumigasi (Gassing) Cover Sheet');
+        const cDate = new Date().toISOString().slice(0, 10);
+        const oDate = initialRecommendation.targetFumigationDeadline || new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+        setClosingDate(cDate);
+        setOpeningDate(oDate);
+        setExecutionDay(getDayNameIndo(cDate) || 'Senin');
+        setOpeningDay(getDayNameIndo(oDate) || 'Kamis');
         setTargetObject(`${initialRecommendation.commodityName} - ${initialRecommendation.quantity} ${initialRecommendation.quantityUnit}`);
         setTargetPest(initialRecommendation.targetPests);
         setNotes(`Eksekusi Rekomendasi QC ${initialRecommendation.recommendationNo}. Catatan K3: ${initialRecommendation.safetyNotes}`);
@@ -125,6 +147,7 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
             i.id === initialRecommendation.recommendedMedicineId ||
             i.name.toLowerCase().includes('fumiphos') ||
             i.name.toLowerCase().includes('phostoxin') ||
+            i.name.toLowerCase().includes('quickphos') ||
             i.category === 'FUMIGASI'
         );
         if (matchedMed) {
@@ -134,59 +157,78 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
           }
         }
         setMedicineQty(String(initialRecommendation.estimatedMedicineQty || 1000));
+        setSelectedFuelId('');
+        setFuelQty('');
+        setFuelBatchNo('');
+      } else if (activeType === 'FUMIGASI') {
+        setClientName('PT. JAPFA COMFEED INDONESIA Tbk - Unit Lampung');
+        setRawMaterialName('Jagung Pipil Pakan Ternak');
+        setRawMaterialBatch('BATCH-JPF-2026-088');
+        setTonnage('1.250 Ton');
+        setWarehouseKavling('Gudang 03 / Kavling K-04');
+        setControlType('Fumigasi (Gassing) Cover Sheet');
+        setTitle('Berita Acara Pengendalian Hama Fumigasi Jagung Pipil');
+        setLocation('Gudang 03 / Kavling K-04');
+        const cDate = new Date().toISOString().slice(0, 10);
+        const oDate = (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 5);
+          return d.toISOString().slice(0, 10);
+        })();
+        setClosingDate(cDate);
+        setOpeningDate(oDate);
+        setExecutionDay(getDayNameIndo(cDate) || 'Senin');
+        setOpeningDay(getDayNameIndo(oDate) || 'Kamis');
+        setExposureHours('120');
+        setGasConcentrationPpm('500');
+        setTarpCondition('Sungkup terpal PVC kedap gas, sand snake terpasang rapat');
+        setSelectedFuelId('');
+        setFuelQty('');
+        setFuelBatchNo('');
 
-        if (activeType === 'FUMIGASI') {
-          setSelectedFuelId('');
-          setFuelQty('');
-          setFuelBatchNo('');
-        } else {
-          const matchedFuel = items.find((i) => i.id === initialRecommendation.recommendedFuelId) || items.find((i) => i.category === 'BBM');
-          if (matchedFuel) {
-            setSelectedFuelId(matchedFuel.id);
-            if (matchedFuel.batches && matchedFuel.batches.length > 0) {
-              setFuelBatchNo(matchedFuel.batches[0].batchNo);
-            }
+        const meds = items.filter((i) => i.category === 'FUMIGASI');
+        if (meds.length > 0) {
+          setSelectedMedicineId(meds[0].id);
+          if (meds[0].batches && meds[0].batches.length > 0) {
+            setMedicineBatchNo(meds[0].batches[0].batchNo);
           }
-          setFuelQty(String(initialRecommendation.estimatedFuelQty || 20));
         }
       } else {
-        if (!rawMaterialName) {
-          setRawMaterialName(jobType === 'FUMIGASI' ? 'Beras Putih Premium' : 'Stok Komoditas & Dinding Perimeter Gudang');
-        }
-        if (!closingDate) {
-          setClosingDate(new Date().toISOString().slice(0, 10));
-        }
-        if (!openingDate) {
-          const d = new Date();
-          d.setDate(d.getDate() + (jobType === 'FUMIGASI' ? 5 : 0));
-          setOpeningDate(d.toISOString().slice(0, 10));
-        }
-        // Auto select first medicine if not selected
-        if (availableMedicines.length > 0 && !selectedMedicineId) {
-          setSelectedMedicineId(availableMedicines[0].id);
-          if (availableMedicines[0].batches && availableMedicines[0].batches.length > 0) {
-            setMedicineBatchNo(availableMedicines[0].batches[0].batchNo);
+        setTitle('Thermal Fogging & Spraying Pengendalian Vektor');
+        setClientName('PT. JAPFA COMFEED INDONESIA Tbk - Unit Lampung');
+        setLocation('Area Perimeter Luar & Saluran Air Pabrik');
+        setRawMaterialName('Dinding Perimeter Luar & Saluran Air Pabrik');
+        setTargetPest('Nyamuk Culex, Aedes, dan Lalat Musca');
+        const cDate = new Date().toISOString().slice(0, 10);
+        setClosingDate(cDate);
+        setOpeningDate(cDate);
+        setExecutionDay(getDayNameIndo(cDate) || 'Senin');
+        setOpeningDay(getDayNameIndo(cDate) || 'Senin');
+        setExposureHours('4');
+        setGasConcentrationPpm('');
+        setTarpCondition('Area terbuka perimeter luar dan saluran air pabrik');
+
+        const meds = items.filter((i) => i.category === 'SPRAYING_FOGGING');
+        if (meds.length > 0) {
+          setSelectedMedicineId(meds[0].id);
+          if (meds[0].batches && meds[0].batches.length > 0) {
+            setMedicineBatchNo(meds[0].batches[0].batchNo);
           }
         }
 
-        // Auto select default fuel only if not Fumigasi
-        if (activeType !== 'FUMIGASI') {
-          if (availableFuels.length > 0 && !selectedFuelId) {
-            setSelectedFuelId(availableFuels[0].id);
-            if (availableFuels[0].batches && availableFuels[0].batches.length > 0) {
-              setFuelBatchNo(availableFuels[0].batches[0].batchNo);
-            }
+        const fuels = items.filter((i) => i.category === 'BBM');
+        if (fuels.length > 0) {
+          setSelectedFuelId(fuels[0].id);
+          if (fuels[0].batches && fuels[0].batches.length > 0) {
+            setFuelBatchNo(fuels[0].batches[0].batchNo);
           }
-        } else {
-          setSelectedFuelId('');
-          setFuelQty('');
-          setFuelBatchNo('');
         }
       }
     }
-  }, [isOpen, jobType, currentUser.name, initialRecommendation]);
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, initialRecommendation, initialJobType]);
 
-  // Adjust defaults when jobType changes
+  // Adjust defaults when user explicitly changes jobType via toggle button
   const handleTypeChange = (newType: JobType) => {
     setJobType(newType);
     const dateCode = new Date().toISOString().slice(0, 10).replace(/-/g, '').slice(2);
@@ -195,34 +237,54 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
     setJobNo(`${prefix}-${dateCode}-${randomNum}`);
 
     if (newType === 'FUMIGASI') {
-      setTitle('Fumigasi Palka Kapal / Silo Komoditas');
+      setTitle('Berita Acara Pengendalian Hama Fumigasi Jagung Pipil');
+      setClientName('PT. JAPFA COMFEED INDONESIA Tbk - Unit Lampung');
+      setLocation(warehouseKavling || 'Gudang 03 / Kavling K-04');
+      setRawMaterialName('Jagung Pipil Pakan Ternak');
+      setRawMaterialBatch('BATCH-JPF-2026-088');
+      setTonnage('1.250 Ton');
+      setWarehouseKavling('Gudang 03 / Kavling K-04');
+      setControlType('Fumigasi (Gassing) Cover Sheet');
+      setExecutionDay(getDayNameIndo(closingDate) || 'Senin');
+      setOpeningDay(getDayNameIndo(openingDate) || 'Kamis');
       setExposureHours('120');
       setGasConcentrationPpm('500');
       setTarpCondition('Sungkup terpal PVC kedap gas, sand snake terpasang rapat');
-      // Fumigasi tidak memerlukan BBM mesin sama sekali
       setSelectedFuelId('');
       setFuelQty('');
       setFuelBatchNo('');
-    } else {
-      setTitle('Thermal Fogging & Spraying Pengendalian Vektor');
-      setExposureHours('4');
-      setGasConcentrationPpm('');
-      setTarpCondition('Area terbuka perimeter luar dan saluran air gudang');
-      if (availableFuels.length > 0 && !selectedFuelId) {
-        setSelectedFuelId(availableFuels[0].id);
-        if (availableFuels[0].batches && availableFuels[0].batches.length > 0) {
-          setFuelBatchNo(availableFuels[0].batches[0].batchNo);
+
+      const meds = items.filter((i) => i.category === 'FUMIGASI');
+      if (meds.length > 0) {
+        setSelectedMedicineId(meds[0].id);
+        if (meds[0].batches && meds[0].batches.length > 0) {
+          setMedicineBatchNo(meds[0].batches[0].batchNo);
         }
       }
-    }
+    } else {
+      setTitle('Thermal Fogging & Spraying Pengendalian Vektor');
+      setClientName('PT. JAPFA COMFEED INDONESIA Tbk - Unit Lampung');
+      setLocation('Area Perimeter Luar & Saluran Air Pabrik');
+      setRawMaterialName('Dinding Perimeter Luar & Saluran Air Pabrik');
+      setTargetPest('Nyamuk Culex, Aedes, dan Lalat Musca');
+      setExposureHours('4');
+      setGasConcentrationPpm('');
+      setTarpCondition('Area terbuka perimeter luar dan saluran air pabrik');
 
-    const meds = items.filter((i) =>
-      newType === 'FUMIGASI' ? i.category === 'FUMIGASI' : i.category === 'SPRAYING_FOGGING'
-    );
-    if (meds.length > 0) {
-      setSelectedMedicineId(meds[0].id);
-      if (meds[0].batches && meds[0].batches.length > 0) {
-        setMedicineBatchNo(meds[0].batches[0].batchNo);
+      const meds = items.filter((i) => i.category === 'SPRAYING_FOGGING');
+      if (meds.length > 0) {
+        setSelectedMedicineId(meds[0].id);
+        if (meds[0].batches && meds[0].batches.length > 0) {
+          setMedicineBatchNo(meds[0].batches[0].batchNo);
+        }
+      }
+
+      const fuels = items.filter((i) => i.category === 'BBM');
+      if (fuels.length > 0) {
+        setSelectedFuelId(fuels[0].id);
+        if (fuels[0].batches && fuels[0].batches.length > 0) {
+          setFuelBatchNo(fuels[0].batches[0].batchNo);
+        }
       }
     }
   };
@@ -285,12 +347,28 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
       jobNo,
       jobType,
       title: title.trim(),
-      clientName: clientName.trim(),
-      location: location.trim(),
-      rawMaterialName: rawMaterialName.trim() || targetObject.trim() || 'Bahan Baku Komoditas',
+      clientName: isFumigasi ? 'PT. JAPFA COMFEED INDONESIA Tbk' : clientName.trim(),
+      location: isFumigasi ? (warehouseKavling.trim() || location.trim()) : location.trim(),
+      formCode: 'PLT-WRH-FM 01-09',
+      companyName: 'PT. JAPFA COMFEED INDONESIA Tbk',
+      unitName: 'Unit Lampung',
+      documentTitle: 'BERITA ACARA PENGENDALIAN HAMA',
+      requestDate: requestDate || closingDate,
+      rawMaterialName: rawMaterialName.trim() || targetObject.trim() || 'Jagung Pipil Pakan Ternak',
+      rawMaterialBatch: isFumigasi ? (rawMaterialBatch.trim() || undefined) : undefined,
+      tonnage: isFumigasi ? (tonnage.trim() || undefined) : undefined,
+      warehouseKavling: isFumigasi ? (warehouseKavling.trim() || location.trim() || undefined) : undefined,
+      fumigantName: isFumigasi ? currentMedicineItem.name : undefined,
+      fumigantQuantityStr: isFumigasi ? `${parsedMedicineQty} ${currentMedicineItem.unit}` : undefined,
+      controlType: isFumigasi ? (controlType.trim() || 'Fumigasi (Gassing) Cover Sheet') : undefined,
+      executionDay: isFumigasi ? (executionDay.trim() || getDayNameIndo(closingDate) || 'Senin') : undefined,
       closingDate: closingDate || executionDate,
+      openingDay: isFumigasi ? (openingDay.trim() || getDayNameIndo(openingDate) || 'Kamis') : undefined,
       openingDate: openingDate || aerationDate || closingDate,
-      targetObject: targetObject.trim() || rawMaterialName.trim(),
+      fumigationOperatorTitle: 'Fimigation Opr',
+      warehouseSupervisorName: isFumigasi ? (warehouseSupervisorName.trim() || 'RM WH Supervisor') : undefined,
+      qcSupervisorName: isFumigasi ? (qcSupervisorName.trim() || 'QC Supervisor') : undefined,
+      targetObject: targetObject.trim() || (isFumigasi ? `${rawMaterialName.trim()} - ${tonnage.trim()}` : rawMaterialName.trim()),
       targetPest: targetPest.trim() || undefined,
       executionDate: closingDate || executionDate,
       aerationDate: openingDate || aerationDate || undefined,
@@ -411,7 +489,7 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
                   <Flame className="w-5 h-5" />
                 </div>
                 <div className="text-left">
-                  <div className="text-sm font-bold text-white">Fumigasi Gas</div>
+                  <div className="text-sm font-bold text-white">Fumigasi</div>
                   <div className="text-[11px] text-slate-400">Kapal, Silo, Gudang, Palka, Kontainer ISPM-15</div>
                 </div>
               </button>
@@ -461,312 +539,686 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
             </div>
           </div>
 
-          {/* DATA UTAMA LAPORAN FUMIGASI: BAHAN BAKU, TGL BUKA & TUTUP */}
-          <div className="p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-950 to-teal-950/30 border border-emerald-500/40 space-y-3">
-            <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2">
-              <span className="font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5 text-xs">
-                <FileCheck2 className="w-4 h-4 text-emerald-400" />
-                Data Pokok Laporan: Nama Bahan Baku, Tanggal Tutup &amp; Buka
-              </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
-                STANDAR ISPM-15
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* 1. NAMA BAHAN BAKU */}
-              <div className="sm:col-span-3">
-                <label className="block text-emerald-300 font-bold mb-1">
-                  🌾 Nama Bahan Baku / Komoditas <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={rawMaterialName}
-                  onChange={(e) => {
-                    setRawMaterialName(e.target.value);
-                    if (!targetObject) setTargetObject(e.target.value);
-                  }}
-                  placeholder="Contoh: Beras Ramos Super 4.500 Ton, Jagung Pipil Pakan Ternak, Kopi Robusta, Pallet Kayu"
-                  required
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-emerald-500/50 text-white font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder-slate-500"
-                />
+          {/* FUMIGASI FORM (BERITA ACARA JAPFA PLT-WRH-FM 01-09) vs SPRAYING & FOGGING WORKSHEET */}
+          {jobType === 'FUMIGASI' ? (
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/90 border-2 border-indigo-500/50 space-y-4 shadow-xl">
+              {/* Header Form JAPFA */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-indigo-500/30 gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-full bg-red-600/20 border-2 border-red-500/50 flex items-center justify-center text-red-500 font-black text-base shadow-inner">
+                    J
+                  </div>
+                  <div>
+                    <div className="text-sm font-black tracking-wide text-white flex items-center gap-2">
+                      <span className="text-red-500">JAPFA</span>
+                      <span>PT. JAPFA COMFEED INDONESIA Tbk</span>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-300">
+                      Unit Lampung
+                    </div>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <h4 className="text-sm font-black uppercase tracking-wider text-amber-400">
+                    BERITA ACARA PENGENDALIAN HAMA
+                  </h4>
+                  <div className="text-[11px] font-mono font-bold text-slate-200 border border-slate-700 bg-slate-900 px-2.5 py-0.5 rounded mt-0.5 inline-block">
+                    PLT-WRH-FM 01-09
+                  </div>
+                </div>
               </div>
 
-              {/* 2. TANGGAL TUTUP */}
-              <div>
-                <label className="block text-slate-300 font-bold mb-1 flex items-center gap-1">
-                  <span>🔒 Tanggal Tutup</span> <span className="text-rose-400">*</span>
-                </label>
+              {/* Pembuka: Pada hari : ... Tanggal : ... telah dilakukan Pengendalian hama: */}
+              <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-slate-200 flex flex-wrap items-center gap-2">
+                <span>Pada hari :</span>
+                <input
+                  type="text"
+                  value={executionDay || getDayNameIndo(closingDate) || 'Senin'}
+                  onChange={(e) => setExecutionDay(e.target.value)}
+                  placeholder="Hari..."
+                  className="px-2.5 py-1 rounded bg-slate-950 border border-slate-700 text-amber-300 font-bold text-xs w-28 text-center"
+                />
+                <span>Tanggal :</span>
                 <input
                   type="date"
                   value={closingDate}
                   onChange={(e) => {
                     setClosingDate(e.target.value);
                     setExecutionDate(e.target.value);
+                    setExecutionDay(getDayNameIndo(e.target.value));
                   }}
                   required
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  className="px-2.5 py-1 rounded bg-slate-950 border border-slate-700 text-white font-mono text-xs"
                 />
-                <span className="text-[10px] text-slate-400 block mt-0.5">Sungkup ditutup &amp; gas dimasukkan</span>
+                <span className="text-slate-400 sm:ml-auto">telah dilakukan Pengendalian hama:</span>
               </div>
 
-              {/* 3. TANGGAL BUKA */}
-              <div>
-                <label className="block text-slate-300 font-bold mb-1 flex items-center gap-1">
-                  <span>🔓 Tanggal Buka</span> <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={openingDate}
-                  onChange={(e) => {
-                    setOpeningDate(e.target.value);
-                    setAerationDate(e.target.value);
-                  }}
-                  required
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                />
-                <span className="text-[10px] text-slate-400 block mt-0.5">Buka sungkup terpal &amp; aerasi gas</span>
+              {/* 8 Field Form Sesuai Dokumen JAPFA */}
+              <div className="space-y-2 text-xs">
+                {/* 1. Tanggal Permintaan */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>1. Tanggal Permintaan</span>
+                    <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                  </label>
+                  <div className="sm:col-span-8">
+                    <input
+                      type="date"
+                      value={requestDate}
+                      onChange={(e) => setRequestDate(e.target.value)}
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Nama Bahan Baku */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>2. Nama Bahan Baku</span>
+                    <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                  </label>
+                  <div className="sm:col-span-8 space-y-1.5">
+                    <input
+                      type="text"
+                      value={rawMaterialName}
+                      onChange={(e) => {
+                        setRawMaterialName(e.target.value);
+                        if (!targetObject) setTargetObject(e.target.value);
+                      }}
+                      placeholder="Contoh: Jagung Pipil Pakan Ternak, Soybean Meal (SBM), Beras..."
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {['Jagung Pipil Pakan Ternak', 'Soybean Meal (SBM)', 'Wheat Pollard', 'Corn Gluten Meal (CGM)', 'Beras Premium'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            setRawMaterialName(preset);
+                            if (!targetObject) setTargetObject(preset);
+                          }}
+                          className="px-2 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Batch */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>3. Batch</span>
+                    <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                  </label>
+                  <div className="sm:col-span-8">
+                    <input
+                      type="text"
+                      value={rawMaterialBatch}
+                      onChange={(e) => setRawMaterialBatch(e.target.value)}
+                      placeholder="Contoh: BATCH-JPF-2026-088"
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-amber-300 font-mono text-xs focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Tonase */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>4. Tonase</span>
+                    <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                  </label>
+                  <div className="sm:col-span-8">
+                    <input
+                      type="text"
+                      value={tonnage}
+                      onChange={(e) => setTonnage(e.target.value)}
+                      placeholder="Contoh: 1.250 Ton / 500 Ton"
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* 5. Gudang/ Kavling */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>5. Gudang/ Kavling</span>
+                    <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                  </label>
+                  <div className="sm:col-span-8">
+                    <input
+                      type="text"
+                      value={warehouseKavling}
+                      onChange={(e) => {
+                        setWarehouseKavling(e.target.value);
+                        setLocation(e.target.value);
+                      }}
+                      placeholder="Contoh: Gudang 03 / Kavling K-04"
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Nama Fumigan */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>6. Nama Fumigan</span>
+                    <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                  </label>
+                  <div className="sm:col-span-8">
+                    <select
+                      value={selectedMedicineId}
+                      onChange={(e) => {
+                        setSelectedMedicineId(e.target.value);
+                        const item = items.find((i) => i.id === e.target.value);
+                        if (item && item.batches && item.batches.length > 0) {
+                          setMedicineBatchNo(item.batches[0].batchNo);
+                        }
+                      }}
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      {availableMedicines.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} (Stok: {item.currentStock} {item.unit})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* 7. Jumlah Fumigan */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>7. Jumlah Fumigan</span>
+                    <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                  </label>
+                  <div className="sm:col-span-8 flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.1"
+                      value={medicineQty}
+                      onChange={(e) => setMedicineQty(e.target.value)}
+                      placeholder="0"
+                      required
+                      className="w-36 px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-rose-300 font-bold font-mono text-xs focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs font-mono text-slate-400">
+                      {currentMedicineItem?.unit || 'Tablet / Flask'}
+                    </span>
+                    {currentMedicineItem && (
+                      <span className="text-[11px] text-emerald-400 ml-auto font-mono">
+                        Stok: {currentMedicineItem.currentStock} {currentMedicineItem.unit}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 8. Jenis Pengendalian */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80">
+                  <label className="sm:col-span-4 font-semibold text-slate-300 flex items-center justify-between">
+                    <span>8. Jenis Pengendalian</span>
+                    <span className="text-slate-500 font-bold hidden sm:inline mr-2">=</span>
+                  </label>
+                  <div className="sm:col-span-8">
+                    <input
+                      type="text"
+                      value={controlType}
+                      onChange={(e) => setControlType(e.target.value)}
+                      placeholder="Contoh: Fumigasi (Gassing) Cover Sheet"
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Target Hama */}
-              <div>
-                <label className="block text-slate-300 font-medium mb-1">
-                  Target Hama Sasaran
-                </label>
-                <input
-                  type="text"
-                  value={targetPest}
-                  onChange={(e) => setTargetPest(e.target.value)}
-                  placeholder="e.g. Sitophilus oryzae, Tribolium"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                />
-                <span className="text-[10px] text-slate-400 block mt-0.5">Hama gudang sasaran</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Klien & Lokasi */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-slate-400 font-medium mb-1">Klien / Perusahaan Pemilik</label>
-              <input
-                type="text"
-                value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                placeholder="e.g. PT Pelayaran Nusantara"
-                required
-                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-400 font-medium mb-1">Lokasi Gudang / Dermaga / Silo</label>
-              <input
-                type="text"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g. Dermaga 102 Pelabuhan Tg. Priok"
-                required
-                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-            </div>
-          </div>
-
-          {/* SECTION: PEMAKAIAN OBAT KIMIA (OUT GUDANG) */}
-          <div className="p-3.5 rounded-xl bg-slate-950/80 border border-rose-500/30 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Beaker className="w-4 h-4" />
-                2. Pemakaian Obat Kimia (Otomatis Potong Stok Keluar)
-              </span>
-              {currentMedicineItem && (
-                <span className="font-mono text-slate-300">
-                  Stok Tersedia: <strong className="text-emerald-400">{currentMedicineItem.currentStock} {currentMedicineItem.unit}</strong>
-                </span>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block text-slate-400 font-medium mb-1">Pilih Bahan Kimia / Obat</label>
-                <select
-                  value={selectedMedicineId}
-                  onChange={(e) => {
-                    setSelectedMedicineId(e.target.value);
-                    const item = items.find((i) => i.id === e.target.value);
-                    if (item && item.batches && item.batches.length > 0) {
-                      setMedicineBatchNo(item.batches[0].batchNo);
-                    }
-                  }}
-                  required
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer"
-                >
-                  {availableMedicines.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      [{item.sku}] {item.name} - Stok: {item.currentStock} {item.unit}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-400 font-medium mb-1">
-                  Jumlah Pemakaian ({currentMedicineItem?.unit || 'Qty'})
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  min="0.1"
-                  value={medicineQty}
-                  onChange={(e) => setMedicineQty(e.target.value)}
-                  placeholder="0"
-                  required
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-rose-300 font-bold font-mono focus:outline-none focus:ring-1 focus:ring-rose-500"
-                />
-              </div>
-            </div>
-
-            {/* Batch selector for medicine */}
-            {currentMedicineItem && currentMedicineItem.batches && currentMedicineItem.batches.length > 0 && (
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                <span>Batch Terpilih:</span>
-                <select
-                  value={medicineBatchNo}
-                  onChange={(e) => setMedicineBatchNo(e.target.value)}
-                  className="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-amber-400 font-mono"
-                >
-                  {currentMedicineItem.batches.map((b) => (
-                    <option key={b.id} value={b.batchNo}>
-                      {b.batchNo} (Qty: {b.quantity} {currentMedicineItem.unit} {b.expiredDate ? `· Exp: ${b.expiredDate}` : ''})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* SECTION: PEMAKAIAN BBM (OUT GUDANG) - HANYA UNTUK SPRAYING & FOGGING (FUMIGASI TIDAK ADA BBM MESIN) */}
-          {jobType === 'SPRAYING_FOGGING' ? (
-            <div className="p-3.5 rounded-xl bg-slate-950/80 border border-amber-500/30 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <Fuel className="w-4 h-4" />
-                  3. Pemakaian BBM &amp; Pelarut Mesin Fogger (Otomatis Potong Stok)
-                </span>
-                {currentFuelItem && (
-                  <span className="font-mono text-slate-300">
-                    Stok Tersedia: <strong className="text-emerald-400">{currentFuelItem.currentStock} {currentFuelItem.unit}</strong>
-                  </span>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
-                  <label className="block text-slate-400 font-medium mb-1">Pilih Jenis BBM / Pelarut Mesin</label>
-                  <select
-                    value={selectedFuelId}
+              {/* Buka Plastik Cover Sheet Notice */}
+              <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 space-y-2 text-xs">
+                <div className="font-semibold text-indigo-200 flex flex-wrap items-center gap-2">
+                  <span>Fumigasi (Gassing) akan dibuka plastik cover sheet pada hari :</span>
+                  <input
+                    type="text"
+                    value={openingDay || getDayNameIndo(openingDate) || 'Kamis'}
+                    onChange={(e) => setOpeningDay(e.target.value)}
+                    placeholder="Hari..."
+                    className="px-2.5 py-1 rounded bg-slate-950 border border-slate-700 text-amber-300 font-bold text-xs w-28 text-center"
+                  />
+                  <span>tanggal :</span>
+                  <input
+                    type="date"
+                    value={openingDate}
                     onChange={(e) => {
-                      setSelectedFuelId(e.target.value);
-                      const fuel = items.find((i) => i.id === e.target.value);
-                      if (fuel && fuel.batches && fuel.batches.length > 0) {
-                        setFuelBatchNo(fuel.batches[0].batchNo);
-                      }
+                      setOpeningDate(e.target.value);
+                      setAerationDate(e.target.value);
+                      setOpeningDay(getDayNameIndo(e.target.value));
                     }}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                    required
+                    className="px-2.5 py-1 rounded bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                  />
+                </div>
+                <p className="italic text-slate-400 text-[11px]">
+                  Demikian berita acara ini kami buat untuk dapat dipergunakan sebagaimana mestinya
+                </p>
+              </div>
+
+              {/* PARAMETER TEKNIS GAS KARANTINA & SUNGKUP */}
+              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-indigo-500/30 space-y-3">
+                <div className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center justify-between">
+                  <span>Parameter Teknis Gas &amp; Sungkup Karantina:</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    BEBAS BBM MESIN
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Target Konsentrasi Gas PH3 (ppm)</label>
+                    <input
+                      type="number"
+                      value={gasConcentrationPpm}
+                      onChange={(e) => setGasConcentrationPpm(e.target.value)}
+                      placeholder="e.g. 500"
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Durasi Waktu Paparan Gas (Jam)</label>
+                    <input
+                      type="number"
+                      value={exposureHours}
+                      onChange={(e) => setExposureHours(e.target.value)}
+                      placeholder="e.g. 120"
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono text-xs"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-slate-400 font-medium mb-1">Kondisi Sungkup Terpal &amp; Sand Snake</label>
+                  <input
+                    type="text"
+                    value={tarpCondition}
+                    onChange={(e) => setTarpCondition(e.target.value)}
+                    placeholder="e.g. Sungkup terpal PVC rangkap 2, sand snake tertutup rapat tanpa kebocoran"
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Tanda Tangan Form JAPFA */}
+              <div className="pt-2 border-t border-slate-800 space-y-2 text-xs">
+                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  Personil Penandatangan Berita Acara:
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      Dibuat Oleh: <strong>Fimigation Opr</strong>
+                    </label>
+                    <input
+                      type="text"
+                      value={operatorName}
+                      onChange={(e) => setOperatorName(e.target.value)}
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      Dibuat Oleh: <strong>RM WH Supervisor</strong>
+                    </label>
+                    <input
+                      type="text"
+                      value={warehouseSupervisorName}
+                      onChange={(e) => setWarehouseSupervisorName(e.target.value)}
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      Mengetahui: <strong>QC Supervisor</strong>
+                    </label>
+                    <input
+                      type="text"
+                      value={qcSupervisorName}
+                      onChange={(e) => setQcSupervisorName(e.target.value)}
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Batch Selector if exists */}
+              {currentMedicineItem && currentMedicineItem.batches && currentMedicineItem.batches.length > 0 && (
+                <div className="flex items-center gap-2 text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+                  <span>Batch Obat Kimia:</span>
+                  <select
+                    value={medicineBatchNo}
+                    onChange={(e) => setMedicineBatchNo(e.target.value)}
+                    className="px-2 py-1 rounded bg-slate-900 border border-slate-700 text-amber-400 font-mono text-xs"
                   >
-                    <option value="">-- Tidak Menggunakan BBM Tambahan --</option>
-                    {availableFuels.map((fuel) => (
-                      <option key={fuel.id} value={fuel.id}>
-                        [{fuel.sku}] {fuel.name} - Sisa: {fuel.currentStock} {fuel.unit}
+                    {currentMedicineItem.batches.map((b) => (
+                      <option key={b.id} value={b.batchNo}>
+                        {b.batchNo} (Qty: {b.quantity} {currentMedicineItem.unit} {b.expiredDate ? `· Exp: ${b.expiredDate}` : ''})
                       </option>
                     ))}
                   </select>
                 </div>
+              )}
 
-                <div>
-                  <label className="block text-slate-400 font-medium mb-1">
-                    Jumlah Liter Keluar
-                  </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
-                    value={fuelQty}
-                    onChange={(e) => setFuelQty(e.target.value)}
-                    placeholder="0 (Liter)"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-amber-300 font-bold font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
-                  />
-                </div>
+              {/* Catatan Tambahan Teknisi */}
+              <div>
+                <label className="block text-slate-400 font-medium mb-1">Catatan Tambahan Teknisi Fumigasi</label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Catatan kondisi komoditas, titik pelepasan tablet PH3, atau kendala lapangan..."
+                  className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                />
               </div>
             </div>
           ) : (
-            <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 text-[11px] text-slate-400 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Flame className="w-4 h-4 text-amber-400" />
-                <span>Pekerjaan <strong>Fumigasi Karantina</strong> menggunakan sungkup kedap gas — <strong>tidak memerlukan BBM mesin</strong>.</span>
-              </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                BEBAS BBM
-              </span>
-            </div>
-          )}
+            /* ================= LEMBAR KERJA KHUSUS SPRAYING & FOGGING ================= */
+            <div className="p-4 sm:p-5 rounded-2xl bg-slate-950/90 border-2 border-emerald-500/50 space-y-4 shadow-xl">
+              {/* Header Lembar Kerja Spraying & Fogging */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-emerald-500/30 gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-full bg-emerald-600/20 border-2 border-emerald-500/50 flex items-center justify-center text-emerald-400 font-black text-base shadow-inner">
+                    <Bug className="w-5 h-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-black tracking-wide text-white flex items-center gap-2">
+                      <span className="text-emerald-400 font-bold">LEMBAR KERJA SPRAYING &amp; FOGGING</span>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-300">
+                      Pengendalian Hama &amp; Vektor Lingkungan Pabrik / Gudang
+                    </div>
+                  </div>
+                </div>
+                <div className="text-left sm:text-right">
+                  <div className="text-[11px] font-mono font-bold text-emerald-300 border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 rounded inline-block">
+                    FORM PENGENDALIAN VEKTOR
+                  </div>
+                </div>
+              </div>
 
-          {/* PARAMETER TEKNIS LAPANGAN */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {jobType === 'FUMIGASI' && (
+              {/* Data Pokok Pekerjaan Spraying & Fogging */}
+              <div className="p-3.5 rounded-xl bg-slate-900/80 border border-emerald-500/30 space-y-3">
+                <div className="text-xs font-bold text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileCheck2 className="w-4 h-4 text-emerald-400" />
+                  1. Data Sasaran &amp; Area Pelaksanaan
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2 space-y-1">
+                    <label className="block text-emerald-300 font-bold mb-1">
+                      Area / Sasaran Pengendalian Vektor <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={rawMaterialName}
+                      onChange={(e) => {
+                        setRawMaterialName(e.target.value);
+                        if (!targetObject) setTargetObject(e.target.value);
+                      }}
+                      placeholder="e.g. Saluran Air, Dinding Perimeter Luar, Gudang Silo"
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-emerald-500/50 text-white font-medium focus:ring-1 focus:ring-emerald-500 text-xs"
+                    />
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[
+                        'Dinding Perimeter Luar Gudang',
+                        'Saluran Air & Drainase Pabrik',
+                        'Area Silo & Boiler Pabrik',
+                        'Gudang Bahan Baku & Palet',
+                        'Pekarangan & Area Terbuka Pabrik',
+                      ].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            setRawMaterialName(preset);
+                            setTargetObject(preset);
+                          }}
+                          className="px-2 py-0.5 rounded text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 cursor-pointer"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">
+                      Tanggal Pelaksanaan <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={closingDate}
+                      onChange={(e) => {
+                        setClosingDate(e.target.value);
+                        setExecutionDate(e.target.value);
+                      }}
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Target Hama Sasaran</label>
+                    <input
+                      type="text"
+                      value={targetPest}
+                      onChange={(e) => setTargetPest(e.target.value)}
+                      placeholder="e.g. Nyamuk Culex/Aedes, Lalat Musca, Kecoa, Kumbang"
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Lokasi Gudang / Area Pabrik</label>
+                    <input
+                      type="text"
+                      value={location}
+                      onChange={(e) => setLocation(e.target.value)}
+                      placeholder="e.g. Area Pabrik Pakan Blok A"
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* PEMAKAIAN INSEKTISIDA (POTONG STOK OBAT GUDANG) */}
+              <div className="p-3.5 rounded-xl bg-slate-900/80 border border-rose-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1.5 text-xs">
+                    <Beaker className="w-4 h-4" />
+                    2. Pemakaian Insektisida / Obat Kimia (Potong Stok Gudang)
+                  </span>
+                  {currentMedicineItem && (
+                    <span className="font-mono text-slate-300 text-xs">
+                      Stok: <strong className="text-emerald-400">{currentMedicineItem.currentStock} {currentMedicineItem.unit}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-400 font-medium mb-1">Pilih Insektisida</label>
+                    <select
+                      value={selectedMedicineId}
+                      onChange={(e) => {
+                        setSelectedMedicineId(e.target.value);
+                        const item = items.find((i) => i.id === e.target.value);
+                        if (item && item.batches && item.batches.length > 0) {
+                          setMedicineBatchNo(item.batches[0].batchNo);
+                        }
+                      }}
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-rose-500 cursor-pointer text-xs"
+                    >
+                      {availableMedicines.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          [{item.sku}] {item.name} - Stok: {item.currentStock} {item.unit}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">
+                      Jumlah Dosis ({currentMedicineItem?.unit || 'Liter/Gram'})
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.1"
+                      value={medicineQty}
+                      onChange={(e) => setMedicineQty(e.target.value)}
+                      placeholder="0"
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-rose-300 font-bold font-mono focus:outline-none focus:ring-1 focus:ring-rose-500 text-xs"
+                    />
+                  </div>
+                </div>
+
+                {/* Batch selector for medicine */}
+                {currentMedicineItem && currentMedicineItem.batches && currentMedicineItem.batches.length > 0 && (
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+                    <span>Batch Terpilih:</span>
+                    <select
+                      value={medicineBatchNo}
+                      onChange={(e) => setMedicineBatchNo(e.target.value)}
+                      className="px-2 py-1 rounded bg-slate-950 border border-slate-700 text-amber-400 font-mono text-xs"
+                    >
+                      {currentMedicineItem.batches.map((b) => (
+                        <option key={b.id} value={b.batchNo}>
+                          {b.batchNo} (Qty: {b.quantity} {currentMedicineItem.unit} {b.expiredDate ? `· Exp: ${b.expiredDate}` : ''})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* PEMAKAIAN BBM & PELARUT MESIN FOGGER (POTONG STOK TANGKI/DRUM) */}
+              <div className="p-3.5 rounded-xl bg-slate-900/80 border border-amber-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5 text-xs">
+                    <Fuel className="w-4 h-4" />
+                    3. Pemakaian BBM &amp; Pelarut Mesin Fogger (Potong Stok BBM)
+                  </span>
+                  {currentFuelItem && (
+                    <span className="font-mono text-slate-300 text-xs">
+                      Stok: <strong className="text-emerald-400">{currentFuelItem.currentStock} {currentFuelItem.unit}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-400 font-medium mb-1">Pilih Jenis BBM / Pelarut Mesin</label>
+                    <select
+                      value={selectedFuelId}
+                      onChange={(e) => {
+                        setSelectedFuelId(e.target.value);
+                        const fuel = items.find((i) => i.id === e.target.value);
+                        if (fuel && fuel.batches && fuel.batches.length > 0) {
+                          setFuelBatchNo(fuel.batches[0].batchNo);
+                        }
+                      }}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer text-xs"
+                    >
+                      <option value="">-- Tidak Menggunakan BBM Tambahan --</option>
+                      {availableFuels.map((fuel) => (
+                        <option key={fuel.id} value={fuel.id}>
+                          [{fuel.sku}] {fuel.name} - Sisa: {fuel.currentStock} {fuel.unit}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">
+                      Jumlah Liter Keluar
+                    </label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={fuelQty}
+                      onChange={(e) => setFuelQty(e.target.value)}
+                      placeholder="0 (Liter)"
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-amber-300 font-bold font-mono focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* PARAMETER OPERASIONAL SPRAYING & FOGGING */}
+              <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-3">
+                <div className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  4. Parameter Operasional &amp; Operator Pelaksana
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Durasi Operasional Mesin (Jam)</label>
+                    <input
+                      type="number"
+                      value={exposureHours}
+                      onChange={(e) => setExposureHours(e.target.value)}
+                      placeholder="e.g. 4"
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono text-xs"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-400 font-medium mb-1">Teknisi / Operator Pelaksana</label>
+                    <input
+                      type="text"
+                      value={operatorName}
+                      onChange={(e) => setOperatorName(e.target.value)}
+                      required
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 font-medium mb-1">Kondisi Area &amp; Cuaca Lapangan</label>
+                  <input
+                    type="text"
+                    value={tarpCondition}
+                    onChange={(e) => setTarpCondition(e.target.value)}
+                    placeholder="e.g. Angin tenang, cuaca cerah, pekerja luar telah dievakuasi sementara"
+                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Catatan Lapangan & Prosedur K3 */}
               <div>
-                <label className="block text-slate-400 font-medium mb-1">Target Konsentrasi Gas (ppm)</label>
-                <input
-                  type="number"
-                  value={gasConcentrationPpm}
-                  onChange={(e) => setGasConcentrationPpm(e.target.value)}
-                  placeholder="e.g. 500"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
+                <label className="block text-slate-400 font-medium mb-1">Catatan Tambahan &amp; K3 Lapangan</label>
+                <textarea
+                  rows={2}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Catatan efikasi knockdown, arah asap fogging, atau kepatuhan APD masker respirator..."
+                  className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
                 />
               </div>
-            )}
-            <div>
-              <label className="block text-slate-400 font-medium mb-1">Durasi Paparan (Jam)</label>
-              <input
-                type="number"
-                value={exposureHours}
-                onChange={(e) => setExposureHours(e.target.value)}
-                placeholder="e.g. 120"
-                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono"
-              />
             </div>
-            <div className={jobType === 'FUMIGASI' ? '' : 'sm:col-span-2'}>
-              <label className="block text-slate-400 font-medium mb-1">Teknisi / Operator Pelaksana</label>
-              <input
-                type="text"
-                value={operatorName}
-                onChange={(e) => setOperatorName(e.target.value)}
-                required
-                className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-slate-400 font-medium mb-1">Kondisi Sungkup / Area Pelaksanaan</label>
-            <input
-              type="text"
-              value={tarpCondition}
-              onChange={(e) => setTarpCondition(e.target.value)}
-              placeholder="e.g. Sungkup terpal rangkap 2, sand snake rapat, blower aktif"
-              className="w-full px-3 py-2 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-slate-400 font-medium mb-1">Catatan Tambahan Teknisi</label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Catatan kondisi cuaca, kendala palka kapal, atau instruksi keselamatan kerja..."
-              className="w-full p-2.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
-            />
-          </div>
+          )}
 
           <div className="p-3 rounded-lg bg-blue-950/30 border border-blue-500/30 text-[11px] text-blue-300 flex items-center gap-2">
             <Clock className="w-4 h-4 shrink-0 text-blue-400" />

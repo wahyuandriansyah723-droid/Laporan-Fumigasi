@@ -95,13 +95,16 @@ import {
   subscribeInventoryItems,
   saveInventoryItem,
   deleteInventoryItem,
+  deleteAllInventoryItems,
   subscribeStockTransactions,
   saveStockTransaction,
   deleteStockTransaction,
   deleteAllStockTransactions,
+  deleteAllOutflowTransactions,
   subscribeJobReports,
   saveJobReport,
   deleteJobReport,
+  deleteAllJobReports,
   subscribeRawRecommendations,
   saveRawRecommendation,
   deleteRawRecommendation,
@@ -507,6 +510,74 @@ export default function App() {
     showToast('Barang berhasil dihapus dari inventaris gudang.');
   };
 
+  // Handler: Delete All Inventory Items (Hapus Semua Stok)
+  const handleDeleteAllInventoryItems = async () => {
+    try {
+      await deleteAllInventoryItems();
+      showToast('Seluruh data stok inventaris gudang berhasil dikosongkan dari cloud.');
+    } catch (err: any) {
+      showToast(`Gagal mengosongkan stok: ${err?.message || 'Error'}`);
+    }
+  };
+
+  // Handler: Delete All Outflows (Hapus Semua Pengeluaran)
+  const handleDeleteAllOutflow = async () => {
+    try {
+      await deleteAllOutflowTransactions();
+      showToast('Seluruh catatan pengeluaran barang & BBM berhasil dihapus dari cloud.');
+    } catch (err: any) {
+      showToast(`Gagal menghapus pengeluaran: ${err?.message || 'Error'}`);
+    }
+  };
+
+  // Handler: Update Fuel Tank Capacity (Pertamax & Solar) directly from Dashboard
+  const handleUpdateTankCapacity = async (
+    itemId: string,
+    newCapacity: number,
+    newMinThreshold?: number,
+    locationName?: string
+  ) => {
+    const targetItem = items.find((i) => i.id === itemId);
+    if (!targetItem) return;
+
+    const updatedItem: InventoryItem = {
+      ...targetItem,
+      tankCapacity: newCapacity,
+      ...(newMinThreshold !== undefined ? { minimumStockThreshold: newMinThreshold, minStockAlert: newMinThreshold } : {}),
+      ...(locationName ? { location: locationName } : {}),
+      lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
+    };
+
+    await saveInventoryItem(updatedItem);
+
+    // Sync with Master Location in master_locations if applicable
+    const isSolar = targetItem.sku.includes('SLR') || targetItem.name.toLowerCase().includes('solar');
+    const isPertamax = targetItem.sku.includes('PTX') || targetItem.name.toLowerCase().includes('pertamax');
+
+    const matchingLoc = locations.find((loc) => {
+      if (isSolar && (loc.storageCategory === 'TANGKI_SOLAR' || loc.code.includes('SLR') || loc.name.toLowerCase().includes('solar'))) {
+        return true;
+      }
+      if (isPertamax && (loc.storageCategory === 'TANGKI_PERTAMAX' || loc.code.includes('PTX') || loc.name.toLowerCase().includes('pertamax'))) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matchingLoc) {
+      await saveMasterDocument(COLLECTIONS.LOCATIONS, {
+        ...matchingLoc,
+        tankCapacityLiters: newCapacity,
+        capacity: `${newCapacity.toLocaleString('id-ID')} Liter`,
+        ...(locationName ? { name: locationName } : {}),
+      });
+    }
+
+    showToast(
+      `Kapasitas tangki ${targetItem.name} berhasil diperbarui menjadi ${newCapacity.toLocaleString('id-ID')} Liter.`
+    );
+  };
+
   // Handler: Apply Stock Opname Adjustments
   const handleApplyOpname = async (
     adjustments: {
@@ -686,6 +757,22 @@ export default function App() {
   const handleDeleteJobReport = async (id: string) => {
     await deleteJobReport(id);
     showToast('Laporan pekerjaan berhasil dihapus.');
+  };
+
+  // Handler: Delete All Job Reports (Hapus Semua Laporan Fumigasi / Fogging)
+  const handleDeleteAllJobReports = async (jobType?: 'FUMIGASI' | 'SPRAYING_FOGGING') => {
+    try {
+      await deleteAllJobReports(jobType);
+      showToast(
+        jobType === 'FUMIGASI'
+          ? 'Seluruh laporan pekerjaan Fumigasi berhasil dihapus dari cloud.'
+          : jobType === 'SPRAYING_FOGGING'
+          ? 'Seluruh laporan pekerjaan Spraying & Fogging berhasil dihapus dari cloud.'
+          : 'Seluruh laporan pekerjaan (Fumigasi & Fogging) berhasil dihapus dari cloud.'
+      );
+    } catch (err: any) {
+      showToast(`Gagal menghapus laporan: ${err?.message || 'Error'}`);
+    }
   };
 
   // Raw Material Recommendations Handlers (QC -> Operator & Admin)
@@ -1814,6 +1901,7 @@ export default function App() {
             currentUser={currentUser}
             onUpdateJobReport={handleUpdateJobReport}
             onDeleteJobReport={handleDeleteJobReport}
+            onDeleteAllJobReports={handleDeleteAllJobReports}
             onOpenNewJobModal={(preselectedType) => {
               if (preselectedType) setOperatorModalJobType(preselectedType);
               setIsOperatorJobModalOpen(true);
@@ -1828,6 +1916,7 @@ export default function App() {
             currentUser={currentUser}
             onUpdateJobReport={handleUpdateJobReport}
             onDeleteJobReport={handleDeleteJobReport}
+            onDeleteAllJobReports={handleDeleteAllJobReports}
             forcedJobType="FUMIGASI"
             onOpenNewJobModal={() => {
               setOperatorModalJobType('FUMIGASI');
@@ -1843,6 +1932,7 @@ export default function App() {
             currentUser={currentUser}
             onUpdateJobReport={handleUpdateJobReport}
             onDeleteJobReport={handleDeleteJobReport}
+            onDeleteAllJobReports={handleDeleteAllJobReports}
             forcedJobType="SPRAYING_FOGGING"
             onOpenNewJobModal={() => {
               setOperatorModalJobType('SPRAYING_FOGGING');
@@ -1947,6 +2037,7 @@ export default function App() {
           <DashboardOverview
             items={items}
             transactions={transactions}
+            currentUser={currentUser}
             onOpenQuickTransaction={(type, item, suggestedQty) => {
               setTrxDefaultItem(item || null);
               setTrxDefaultType(type);
@@ -1965,6 +2056,7 @@ export default function App() {
               setActiveSuratJalanTrx(trx);
               setIsSuratJalanOpen(true);
             }}
+            onUpdateTankCapacity={handleUpdateTankCapacity}
           />
         )}
 
@@ -1996,6 +2088,7 @@ export default function App() {
               setIsAddItemModalOpen(true);
             }}
             onDeleteItem={handleDeleteItem}
+            onDeleteAllItems={handleDeleteAllInventoryItems}
             onSaveItem={handleSaveItem}
             onExportCSV={() => exportInventoryToCSV(items)}
             currentUser={currentUser}
@@ -2035,6 +2128,7 @@ export default function App() {
             }}
             onUpdateOutflow={handleUpdateTransaction}
             onDeleteOutflow={handleDeleteTransaction}
+            onDeleteAllOutflow={handleDeleteAllOutflow}
             onNavigateToMutations={() => {
               setCurrentTab('mutations');
             }}

@@ -99,6 +99,9 @@ export interface MasterLocation {
   zone: string; // e.g. "Bunker B3", "Yard Tangki", "Rak A"
   type: 'TANK' | 'BUNKER' | 'RACK' | 'DRUM_STATION' | 'GENERAL';
   capacity?: string;
+  storageCategory?: 'TANGKI_SOLAR' | 'TANGKI_PERTAMAX' | 'GUDANG_OBAT_FUMIGASI' | 'GUDANG_OBAT_SPRAYING' | 'UMUM';
+  tankCapacityLiters?: number; // Kapasitas Tangki (Liter) khusus Solar & Pertamax
+  warehouseCapacitySpec?: string; // Kapasitas Gudang Obat (misal: "2.500 Kg / 2.000 Flask")
   hazmatApproved: boolean;
   status: 'ACTIVE' | 'INACTIVE';
   notes?: string;
@@ -149,6 +152,7 @@ export interface MasterChemicalMedicine {
   standardPrice: number;
   packagingSpec: string; // e.g. Aluminium Flask 1 Kg (334 tablet)
   storageRequirement?: string;
+  warehouseCapacity?: string; // Kapasitas Alokasi Gudang Obat
   status: 'ACTIVE' | 'INACTIVE';
   notes?: string;
 }
@@ -163,6 +167,7 @@ export interface MasterFuelType {
   density: number; // e.g. 0.84 kg/L
   flashPoint: string; // e.g. > 52°C
   defaultTankLocation: string; // e.g. Tangki Utama T-01 (Yard Barat)
+  tankCapacity?: number; // Kapasitas Maksimal Tangki BBM (Liter), misal: 5.000L untuk Solar, 2.000L untuk Pertamax
   defaultUnit: string; // e.g. Liter
   standardPricePerLiter: number;
   minimumAlertThreshold: number; // in Liters, e.g. 500

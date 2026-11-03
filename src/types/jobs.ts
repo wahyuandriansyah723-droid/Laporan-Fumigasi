@@ -12,10 +12,28 @@ export interface FumigationJobReport {
   clientName: string;
   location: string;
 
-  // DATA UTAMA LAPORAN FUMIGASI:
-  rawMaterialName: string; // NAMA BAHAN BAKU (e.g. Beras Ramos, Jagung Pipil, Biji Kopi, Pallet Kayu ISPM-15, dll)
-  closingDate: string; // TANGGAL TUTUP (Tanggal Sungkup / Tutup Terpal / Mulai Fumigasi)
-  openingDate: string; // TANGGAL BUKA (Tanggal Buka Sungkup / Buka Terpal / Aerasi Gas)
+  // FORMAT BERITA ACARA PENGENDALIAN HAMA (PLT-WRH-FM 01-09 - PT. JAPFA COMFEED INDONESIA Tbk - Unit Lampung)
+  formCode?: string; // default 'PLT-WRH-FM 01-09'
+  companyName?: string; // default 'PT. JAPFA COMFEED INDONESIA Tbk'
+  unitName?: string; // default 'Unit Lampung'
+  documentTitle?: string; // default 'BERITA ACARA PENGENDALIAN HAMA'
+  requestDate?: string; // 1. Tanggal Permintaan
+  rawMaterialName: string; // 2. Nama Bahan Baku (e.g. Jagung Pipil, Soybean Meal, Beras, Wheat Pollard)
+  rawMaterialBatch?: string; // 3. Batch (e.g. BATCH-JPF-2026-088)
+  tonnage?: string; // 4. Tonase (e.g. 1.250 Ton)
+  warehouseKavling?: string; // 5. Gudang/ Kavling (e.g. Gudang 03 / Kavling K-04)
+  fumigantName?: string; // 6. Nama Fumigan (e.g. Quickphos 56 TB / Phostoxin)
+  fumigantQuantityStr?: string; // 7. Jumlah Fumigan (e.g. 150 Flask / 150.000 Tablet)
+  controlType?: string; // 8. Jenis Pengendalian (e.g. Fumigasi (Gassing) Cover Sheet)
+  executionDay?: string; // Hari dilakukan (e.g. Senin)
+  closingDate: string; // Tanggal dilakukan / Tanggal tutup
+  openingDay?: string; // Hari dibuka plastik cover sheet (e.g. Kamis)
+  openingDate: string; // Tanggal dibuka plastik cover sheet / aerasi
+
+  // Tanda Tangan & Personil
+  fumigationOperatorTitle?: string; // 'Fimigation Opr'
+  warehouseSupervisorName?: string; // 'RM WH Supervisor' (e.g. Agus Pranoto / Sutrisno)
+  qcSupervisorName?: string; // 'QC Supervisor' (e.g. Ratna Dewi, S.Si)
 
   targetObject: string; // e.g. "Palka Kapal MV Samudera Perkasa 02 (4.500 Ton Beras)", "Silo Jagung"
   targetPest?: string; // e.g. "Sitophilus oryzae, Tribolium castaneum"
@@ -24,7 +42,7 @@ export interface FumigationJobReport {
   operatorName: string; // Teknisi/Operator yang melaksanakan
   operatorNip?: string;
 
-  // Obat Kimia yang dikeluarkan & digunakan
+  // Obat Kimia yang dikeluarkan & digunakan (terhubung ke inventaris gudang)
   medicineItemId?: string;
   medicineSku?: string;
   medicineName: string;

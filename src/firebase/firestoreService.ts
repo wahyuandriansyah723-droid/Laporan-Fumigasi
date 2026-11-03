@@ -57,6 +57,28 @@ export const COLLECTIONS = {
   SETTINGS: 'system_settings',
 } as const;
 
+/**
+ * Recursively strips keys whose value is undefined, which Firestore rejects in setDoc/updateDoc.
+ */
+export function sanitizeForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+  if (typeof data === 'object') {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data as Record<string, any>)) {
+      if (value !== undefined) {
+        cleaned[key] = sanitizeForFirestore(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return data;
+}
+
 // 1. INVENTORY ITEMS (Real-time listener)
 export const subscribeInventoryItems = (
   callback: (items: InventoryItem[]) => void
@@ -80,7 +102,7 @@ export const subscribeInventoryItems = (
 export const saveInventoryItem = async (item: InventoryItem): Promise<void> => {
   try {
     const docRef = doc(db, COLLECTIONS.ITEMS, item.id);
-    await setDoc(docRef, item, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(item), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.ITEMS}/${item.id}`);
   }
@@ -92,6 +114,17 @@ export const deleteInventoryItem = async (itemId: string): Promise<void> => {
     await deleteDoc(docRef);
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `${COLLECTIONS.ITEMS}/${itemId}`);
+  }
+};
+
+export const deleteAllInventoryItems = async (): Promise<void> => {
+  try {
+    const snap = await getDocs(collection(db, COLLECTIONS.ITEMS));
+    const batch = writeBatch(db);
+    snap.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, COLLECTIONS.ITEMS);
   }
 };
 
@@ -120,7 +153,7 @@ export const subscribeStockTransactions = (
 export const saveStockTransaction = async (trx: StockTransaction): Promise<void> => {
   try {
     const docRef = doc(db, COLLECTIONS.TRANSACTIONS, trx.id);
-    await setDoc(docRef, trx, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(trx), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.TRANSACTIONS}/${trx.id}`);
   }
@@ -140,6 +173,22 @@ export const deleteAllStockTransactions = async (): Promise<void> => {
     const snap = await getDocs(collection(db, COLLECTIONS.TRANSACTIONS));
     const batch = writeBatch(db);
     snap.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, COLLECTIONS.TRANSACTIONS);
+  }
+};
+
+export const deleteAllOutflowTransactions = async (): Promise<void> => {
+  try {
+    const snap = await getDocs(collection(db, COLLECTIONS.TRANSACTIONS));
+    const batch = writeBatch(db);
+    snap.forEach((d) => {
+      const data = d.data() as StockTransaction;
+      if (data.type === 'OUT') {
+        batch.delete(d.ref);
+      }
+    });
     await batch.commit();
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, COLLECTIONS.TRANSACTIONS);
@@ -170,7 +219,7 @@ export const subscribeJobReports = (
 export const saveJobReport = async (report: FumigationJobReport): Promise<void> => {
   try {
     const docRef = doc(db, COLLECTIONS.JOB_REPORTS, report.id);
-    await setDoc(docRef, report, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(report), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.JOB_REPORTS}/${report.id}`);
   }
@@ -182,6 +231,22 @@ export const deleteJobReport = async (reportId: string): Promise<void> => {
     await deleteDoc(docRef);
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, `${COLLECTIONS.JOB_REPORTS}/${reportId}`);
+  }
+};
+
+export const deleteAllJobReports = async (jobType?: 'FUMIGASI' | 'SPRAYING_FOGGING'): Promise<void> => {
+  try {
+    const snap = await getDocs(collection(db, COLLECTIONS.JOB_REPORTS));
+    const batch = writeBatch(db);
+    snap.forEach((d) => {
+      const data = d.data() as FumigationJobReport;
+      if (!jobType || data.jobType === jobType) {
+        batch.delete(d.ref);
+      }
+    });
+    await batch.commit();
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, COLLECTIONS.JOB_REPORTS);
   }
 };
 
@@ -209,7 +274,7 @@ export const subscribeRawRecommendations = (
 export const saveRawRecommendation = async (rec: RawMaterialRecommendation): Promise<void> => {
   try {
     const docRef = doc(db, COLLECTIONS.RECOMMENDATIONS, rec.id);
-    await setDoc(docRef, rec, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(rec), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.RECOMMENDATIONS}/${rec.id}`);
   }
@@ -251,7 +316,7 @@ export const subscribeAuthUsers = (
 export const saveAuthUser = async (user: AuthUser): Promise<void> => {
   try {
     const docRef = doc(db, COLLECTIONS.USERS, user.id);
-    await setDoc(docRef, user, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(user), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.USERS}/${user.id}`);
   }
@@ -291,7 +356,7 @@ export async function saveMasterDocument<T extends { id: string }>(
 ): Promise<void> {
   try {
     const docRef = doc(db, collectionName, docItem.id);
-    await setDoc(docRef, docItem, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(docItem), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${collectionName}/${docItem.id}`);
   }
@@ -330,7 +395,7 @@ export const subscribeSystemSettings = (
 export const saveSystemSettings = async (settings: SystemSettings): Promise<void> => {
   try {
     const docRef = doc(db, COLLECTIONS.SETTINGS, 'default_setting');
-    await setDoc(docRef, settings, { merge: true });
+    await setDoc(docRef, sanitizeForFirestore(settings), { merge: true });
   } catch (err) {
     handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.SETTINGS}/default_setting`);
   }
@@ -345,7 +410,7 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       console.log('Seeding initial inventory items to Firestore...');
       const batch = writeBatch(db);
       INITIAL_ITEMS.forEach((it) => {
-        batch.set(doc(db, COLLECTIONS.ITEMS, it.id), it);
+        batch.set(doc(db, COLLECTIONS.ITEMS, it.id), sanitizeForFirestore(it));
       });
       await batch.commit();
     }
@@ -356,7 +421,7 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       console.log('Seeding initial transactions to Firestore...');
       const batch = writeBatch(db);
       INITIAL_TRANSACTIONS.forEach((trx) => {
-        batch.set(doc(db, COLLECTIONS.TRANSACTIONS, trx.id), trx);
+        batch.set(doc(db, COLLECTIONS.TRANSACTIONS, trx.id), sanitizeForFirestore(trx));
       });
       await batch.commit();
     }
@@ -367,7 +432,7 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       console.log('Seeding initial auth users to Firestore...');
       const batch = writeBatch(db);
       INITIAL_AUTH_USERS.forEach((user) => {
-        batch.set(doc(db, COLLECTIONS.USERS, user.id), user);
+        batch.set(doc(db, COLLECTIONS.USERS, user.id), sanitizeForFirestore(user));
       });
       await batch.commit();
     }
@@ -378,7 +443,7 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       console.log('Seeding initial job reports to Firestore...');
       const batch = writeBatch(db);
       INITIAL_JOB_REPORTS.forEach((j) => {
-        batch.set(doc(db, COLLECTIONS.JOB_REPORTS, j.id), j);
+        batch.set(doc(db, COLLECTIONS.JOB_REPORTS, j.id), sanitizeForFirestore(j));
       });
       await batch.commit();
     }
@@ -389,7 +454,7 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       console.log('Seeding initial recommendations to Firestore...');
       const batch = writeBatch(db);
       INITIAL_RAW_RECOMMENDATIONS.forEach((r) => {
-        batch.set(doc(db, COLLECTIONS.RECOMMENDATIONS, r.id), r);
+        batch.set(doc(db, COLLECTIONS.RECOMMENDATIONS, r.id), sanitizeForFirestore(r));
       });
       await batch.commit();
     }
@@ -397,63 +462,63 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
     // Check system settings
     const settingSnap = await getDocs(collection(db, COLLECTIONS.SETTINGS));
     if (settingSnap.empty) {
-      await setDoc(doc(db, COLLECTIONS.SETTINGS, 'default_setting'), INITIAL_SYSTEM_SETTINGS);
+      await setDoc(doc(db, COLLECTIONS.SETTINGS, 'default_setting'), sanitizeForFirestore(INITIAL_SYSTEM_SETTINGS));
     }
 
     // Check master data
     const supSnap = await getDocs(collection(db, COLLECTIONS.SUPPLIERS));
     if (supSnap.empty) {
       const b = writeBatch(db);
-      INITIAL_SUPPLIERS.forEach((s) => b.set(doc(db, COLLECTIONS.SUPPLIERS, s.id), s));
+      INITIAL_SUPPLIERS.forEach((s) => b.set(doc(db, COLLECTIONS.SUPPLIERS, s.id), sanitizeForFirestore(s)));
       await b.commit();
     }
 
     const locSnap = await getDocs(collection(db, COLLECTIONS.LOCATIONS));
     if (locSnap.empty) {
       const b = writeBatch(db);
-      INITIAL_LOCATIONS.forEach((l) => b.set(doc(db, COLLECTIONS.LOCATIONS, l.id), l));
+      INITIAL_LOCATIONS.forEach((l) => b.set(doc(db, COLLECTIONS.LOCATIONS, l.id), sanitizeForFirestore(l)));
       await b.commit();
     }
 
     const opSnap = await getDocs(collection(db, COLLECTIONS.OPERATORS));
     if (opSnap.empty) {
       const b = writeBatch(db);
-      INITIAL_OPERATORS.forEach((o) => b.set(doc(db, COLLECTIONS.OPERATORS, o.id), o));
+      INITIAL_OPERATORS.forEach((o) => b.set(doc(db, COLLECTIONS.OPERATORS, o.id), sanitizeForFirestore(o)));
       await b.commit();
     }
 
     const destSnap = await getDocs(collection(db, COLLECTIONS.DESTINATIONS));
     if (destSnap.empty) {
       const b = writeBatch(db);
-      INITIAL_PROJECT_DESTINATIONS.forEach((d) => b.set(doc(db, COLLECTIONS.DESTINATIONS, d.id), d));
+      INITIAL_PROJECT_DESTINATIONS.forEach((d) => b.set(doc(db, COLLECTIONS.DESTINATIONS, d.id), sanitizeForFirestore(d)));
       await b.commit();
     }
 
     const unitSnap = await getDocs(collection(db, COLLECTIONS.UNITS));
     if (unitSnap.empty) {
       const b = writeBatch(db);
-      INITIAL_UNITS.forEach((u) => b.set(doc(db, COLLECTIONS.UNITS, u.id), u));
+      INITIAL_UNITS.forEach((u) => b.set(doc(db, COLLECTIONS.UNITS, u.id), sanitizeForFirestore(u)));
       await b.commit();
     }
 
     const medSnap = await getDocs(collection(db, COLLECTIONS.MEDICINES));
     if (medSnap.empty) {
       const b = writeBatch(db);
-      INITIAL_CHEMICAL_MEDICINES.forEach((m) => b.set(doc(db, COLLECTIONS.MEDICINES, m.id), m));
+      INITIAL_CHEMICAL_MEDICINES.forEach((m) => b.set(doc(db, COLLECTIONS.MEDICINES, m.id), sanitizeForFirestore(m)));
       await b.commit();
     }
 
     const fuelSnap = await getDocs(collection(db, COLLECTIONS.FUELS));
     if (fuelSnap.empty) {
       const b = writeBatch(db);
-      INITIAL_FUEL_TYPES.forEach((f) => b.set(doc(db, COLLECTIONS.FUELS, f.id), f));
+      INITIAL_FUEL_TYPES.forEach((f) => b.set(doc(db, COLLECTIONS.FUELS, f.id), sanitizeForFirestore(f)));
       await b.commit();
     }
 
     const eqSnap = await getDocs(collection(db, COLLECTIONS.EQUIPMENT));
     if (eqSnap.empty) {
       const b = writeBatch(db);
-      INITIAL_EQUIPMENT_INVENTORY.forEach((e) => b.set(doc(db, COLLECTIONS.EQUIPMENT, e.id), e));
+      INITIAL_EQUIPMENT_INVENTORY.forEach((e) => b.set(doc(db, COLLECTIONS.EQUIPMENT, e.id), sanitizeForFirestore(e)));
       await b.commit();
     }
 

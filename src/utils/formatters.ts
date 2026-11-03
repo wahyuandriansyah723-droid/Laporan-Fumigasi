@@ -91,3 +91,15 @@ export function getExpiryStatus(expiredDate?: string): {
     return { status: 'safe', label: `Aman (${diffDays} hari lagi)`, daysRemaining: diffDays };
   }
 }
+
+export function getDayNameIndo(dateStr?: string): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '';
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    return days[d.getDay()];
+  } catch {
+    return '';
+  }
+}

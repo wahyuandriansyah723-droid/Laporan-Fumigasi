@@ -44,6 +44,9 @@ import {
   Flame,
   Wrench,
   Pill,
+  Gauge,
+  Droplet,
+  ShieldAlert,
 } from 'lucide-react';
 import { CATEGORY_CONFIGS } from '../data/initialMasterData';
 import {
@@ -151,6 +154,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<MasterTab>('medicines');
   const [searchQuery, setSearchQuery] = useState('');
+  const [locationCategoryFilter, setLocationCategoryFilter] = useState<'ALL' | 'TANKS' | 'MEDICINES' | 'OTHER'>('ALL');
 
   // Modal states for CRUD
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -241,7 +245,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                   {activeTab === 'fuels' && 'Tambah Master BBM Baru'}
                   {activeTab === 'equipment' && 'Tambah Master Inventaris Baru'}
                   {activeTab === 'suppliers' && 'Tambah Pemasok Baru'}
-                  {activeTab === 'locations' && 'Tambah Lokasi / Tangki'}
+                  {activeTab === 'locations' && 'Tambah Tangki / Gudang Baru'}
                   {activeTab === 'operators' && 'Tambah Petugas / Teknisi'}
                   {activeTab === 'destinations' && 'Tambah Tujuan Proyek'}
                   {activeTab === 'units' && 'Tambah Satuan Ukuran'}
@@ -329,8 +333,8 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
             }`}
           >
-            <MapPin className="w-4 h-4" />
-            <span>Lokasi, Tangki & Bunker ({totalLocations})</span>
+            <MapPin className="w-4 h-4 text-cyan-400" />
+            <span>Kapasitas Tangki & Gudang Obat ({totalLocations})</span>
           </button>
 
           <button
@@ -622,93 +626,427 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
         </div>
       )}
 
-      {/* ================= 2. TAB: LOCATIONS ================= */}
+      {/* ================= 2. TAB: LOCATIONS (KAPASITAS TANGKI BBM & GUDANG OBAT) ================= */}
       {activeTab === 'locations' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {locations
-            .filter((l) => {
-              if (!searchQuery.trim()) return true;
-              const q = searchQuery.toLowerCase();
-              return (
-                l.name.toLowerCase().includes(q) ||
-                l.code.toLowerCase().includes(q) ||
-                l.zone.toLowerCase().includes(q)
-              );
-            })
-            .map((loc) => (
-              <div
-                key={loc.id}
-                className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition-colors shadow"
-              >
+        <div className="space-y-4">
+          {/* Quick Sub-Filter and Summary */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                  <Gauge className="w-4 h-4" />
+                </span>
                 <div>
-                  <div className="flex items-center justify-between text-xs font-mono mb-2">
-                    <span className="font-bold text-amber-400">{loc.code}</span>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        loc.hazmatApproved
-                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                          : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                      }`}
-                    >
-                      {loc.hazmatApproved ? 'IZIN B3 / HAZMAT' : 'REGULER'}
-                    </span>
-                  </div>
-
-                  <h3 className="font-bold text-white text-sm line-clamp-1" title={loc.name}>
-                    {loc.name}
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Kapasitas Tangki BBM & Gudang Obat
                   </h3>
-                  <div className="text-[11px] font-mono text-slate-400 mt-0.5">
-                    Zona: <strong className="text-slate-300">{loc.zone}</strong>
-                  </div>
-
-                  <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2 text-xs">
-                    <div className="flex justify-between font-mono text-[11px]">
-                      <span className="text-slate-500">Tipe Penyimpanan:</span>
-                      <span className="text-slate-300 font-semibold">{loc.type}</span>
-                    </div>
-                    {loc.capacity && (
-                      <div className="flex justify-between font-mono text-[11px]">
-                        <span className="text-slate-500">Kapasitas Maksimal:</span>
-                        <span className="text-amber-400 font-semibold">{loc.capacity}</span>
-                      </div>
-                    )}
-                    {loc.notes && (
-                      <div className="text-[11px] text-slate-400 bg-slate-950 p-2 rounded border border-slate-800 leading-relaxed">
-                        {loc.notes}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-3 mt-3 border-t border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(loc)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 text-xs font-semibold cursor-pointer transition-colors border border-slate-700 shadow-sm"
-                    title="Ubah Data Lokasi"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                    <span>Edit</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDeletingMasterItem({
-                        tab: 'locations',
-                        id: loc.id,
-                        name: loc.name,
-                        codeOrRole: loc.code,
-                      })
-                    }
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 hover:text-rose-300 text-xs font-semibold cursor-pointer transition-colors border border-rose-900/50 shadow-sm"
-                    title="Hapus Data Lokasi"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Hapus</span>
-                  </button>
+                  <p className="text-[11px] text-slate-400">
+                    Monitoring kapasitas fisik tangki pendam Solar, Pertamax RON 92, serta bunker & gudang obat kimia.
+                  </p>
                 </div>
               </div>
-            ))}
+
+              {/* Sub-filter tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto text-xs">
+                <button
+                  type="button"
+                  onClick={() => setLocationCategoryFilter('ALL')}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
+                    locationCategoryFilter === 'ALL'
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Semua ({locations.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocationCategoryFilter('TANKS')}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+                    locationCategoryFilter === 'TANKS'
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Fuel className="w-3 h-3 text-amber-400" />
+                  <span>Tangki Solar & Pertamax ({locations.filter(l => l.type === 'TANK' || l.storageCategory === 'TANGKI_SOLAR' || l.storageCategory === 'TANGKI_PERTAMAX' || l.name.toLowerCase().includes('tangki')).length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocationCategoryFilter('MEDICINES')}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-colors cursor-pointer flex items-center gap-1 ${
+                    locationCategoryFilter === 'MEDICINES'
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Pill className="w-3 h-3 text-emerald-400" />
+                  <span>Gudang Obat-Obatan ({locations.filter(l => l.storageCategory === 'GUDANG_OBAT_FUMIGASI' || l.storageCategory === 'GUDANG_OBAT_SPRAYING' || l.type === 'BUNKER' || l.name.toLowerCase().includes('obat') || l.name.toLowerCase().includes('bunker')).length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocationCategoryFilter('OTHER')}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-colors cursor-pointer ${
+                    locationCategoryFilter === 'OTHER'
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                      : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Rak & Lainnya
+                </button>
+              </div>
+            </div>
+
+            {/* Capacity Highlights */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3">
+              <div className="p-3 rounded-xl bg-slate-950 border border-amber-500/30 flex flex-col justify-between shadow-sm">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                      <Fuel className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Tangki Solar Industri</span>
+                    </div>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      T-01
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold font-mono text-amber-400 mt-1">
+                    {locations
+                      .filter(l => l.storageCategory === 'TANGKI_SOLAR' || (l.type === 'TANK' && l.name.toLowerCase().includes('solar')))
+                      .reduce((sum, l) => sum + (l.tankCapacityLiters || 5000), 0)
+                      .toLocaleString('id-ID')} L
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Tangki Pendam Solar B35</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const solarLoc = locations.find(l => l.storageCategory === 'TANGKI_SOLAR' || (l.type === 'TANK' && l.name.toLowerCase().includes('solar')));
+                    if (solarLoc) {
+                      handleOpenEdit(solarLoc);
+                    } else {
+                      handleOpenAdd();
+                    }
+                  }}
+                  className="mt-2.5 w-full py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/40 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Edit2 className="w-3 h-3" />
+                  <span>Edit Kapasitas Solar</span>
+                </button>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-cyan-500/30 flex flex-col justify-between shadow-sm">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                      <Fuel className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Tangki Pertamax 92</span>
+                    </div>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                      T-02
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold font-mono text-cyan-400 mt-1">
+                    {locations
+                      .filter(l => l.storageCategory === 'TANGKI_PERTAMAX' || (l.type === 'TANK' && l.name.toLowerCase().includes('pertamax')))
+                      .reduce((sum, l) => sum + (l.tankCapacityLiters || 2000), 0)
+                      .toLocaleString('id-ID')} L
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Tangki Khusus Mesin Fogger</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ptxLoc = locations.find(l => l.storageCategory === 'TANGKI_PERTAMAX' || (l.type === 'TANK' && l.name.toLowerCase().includes('pertamax')));
+                    if (ptxLoc) {
+                      handleOpenEdit(ptxLoc);
+                    } else {
+                      handleOpenAdd();
+                    }
+                  }}
+                  className="mt-2.5 w-full py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-xs font-semibold border border-cyan-500/40 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Edit2 className="w-3 h-3" />
+                  <span>Edit Kapasitas Pertamax</span>
+                </button>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-rose-500/30 flex flex-col justify-between shadow-sm">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                      <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Gudang Obat Fumigasi</span>
+                    </div>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                      B3
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold font-mono text-rose-400 mt-1">
+                    2.500 Kg
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">±2.500 Flask Phostoxin/Quickphos</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fumLoc = locations.find(l => l.storageCategory === 'GUDANG_OBAT_FUMIGASI' || (l.type === 'BUNKER' && l.name.toLowerCase().includes('fumigasi')));
+                    if (fumLoc) {
+                      handleOpenEdit(fumLoc);
+                    } else {
+                      handleOpenAdd();
+                    }
+                  }}
+                  className="mt-2.5 w-full py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold border border-rose-500/40 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Edit2 className="w-3 h-3" />
+                  <span>Edit Gudang Obat B3</span>
+                </button>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-emerald-500/30 flex flex-col justify-between shadow-sm">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                      <Droplet className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Gudang Cair Spraying</span>
+                    </div>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      AIR/SLR
+                    </span>
+                  </div>
+                  <div className="text-lg font-bold font-mono text-emerald-400 mt-1">
+                    1.500 L
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">Konsentrat Fogging & Spraying</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sprayLoc = locations.find(l => l.storageCategory === 'GUDANG_OBAT_SPRAYING' || l.name.toLowerCase().includes('spraying'));
+                    if (sprayLoc) {
+                      handleOpenEdit(sprayLoc);
+                    } else {
+                      handleOpenAdd();
+                    }
+                  }}
+                  className="mt-2.5 w-full py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold border border-emerald-500/40 flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Edit2 className="w-3 h-3" />
+                  <span>Edit Gudang Spraying</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {locations
+              .filter((l) => {
+                // Category sub-filter
+                if (locationCategoryFilter === 'TANKS') {
+                  const isTank = l.type === 'TANK' || l.storageCategory === 'TANGKI_SOLAR' || l.storageCategory === 'TANGKI_PERTAMAX' || l.name.toLowerCase().includes('tangki');
+                  if (!isTank) return false;
+                } else if (locationCategoryFilter === 'MEDICINES') {
+                  const isMed = l.storageCategory === 'GUDANG_OBAT_FUMIGASI' || l.storageCategory === 'GUDANG_OBAT_SPRAYING' || l.type === 'BUNKER' || l.name.toLowerCase().includes('obat') || l.name.toLowerCase().includes('bunker');
+                  if (!isMed) return false;
+                } else if (locationCategoryFilter === 'OTHER') {
+                  const isTankOrMed = l.type === 'TANK' || l.type === 'BUNKER' || l.storageCategory === 'TANGKI_SOLAR' || l.storageCategory === 'TANGKI_PERTAMAX' || l.storageCategory === 'GUDANG_OBAT_FUMIGASI' || l.storageCategory === 'GUDANG_OBAT_SPRAYING' || l.name.toLowerCase().includes('tangki') || l.name.toLowerCase().includes('obat');
+                  if (isTankOrMed) return false;
+                }
+
+                // Search query
+                if (!searchQuery.trim()) return true;
+                const q = searchQuery.toLowerCase();
+                return (
+                  l.name.toLowerCase().includes(q) ||
+                  l.code.toLowerCase().includes(q) ||
+                  l.zone.toLowerCase().includes(q) ||
+                  (l.capacity && l.capacity.toLowerCase().includes(q))
+                );
+              })
+              .map((loc) => {
+                const isSolarTank = loc.storageCategory === 'TANGKI_SOLAR' || (loc.type === 'TANK' && loc.name.toLowerCase().includes('solar'));
+                const isPertamaxTank = loc.storageCategory === 'TANGKI_PERTAMAX' || (loc.type === 'TANK' && loc.name.toLowerCase().includes('pertamax'));
+                const isFumigasiBunker = loc.storageCategory === 'GUDANG_OBAT_FUMIGASI' || (loc.type === 'BUNKER' && loc.name.toLowerCase().includes('fumigasi'));
+                const isSprayingWh = loc.storageCategory === 'GUDANG_OBAT_SPRAYING' || loc.name.toLowerCase().includes('spraying') || loc.name.toLowerCase().includes('fogging');
+
+                // Compute physical stock if fuel tank
+                const tankCap = loc.tankCapacityLiters || (isSolarTank ? 5000 : isPertamaxTank ? 2000 : undefined);
+                let currentPhysicalStock: number | null = null;
+                if (tankCap) {
+                  currentPhysicalStock = items
+                    .filter((it) => {
+                      if (it.location === loc.name) return true;
+                      if (isSolarTank && it.name.toLowerCase().includes('solar')) return true;
+                      if (isPertamaxTank && it.name.toLowerCase().includes('pertamax')) return true;
+                      return false;
+                    })
+                    .reduce((sum, it) => sum + (it.currentStock || 0), 0);
+                }
+
+                const fillPercent = tankCap && currentPhysicalStock !== null
+                  ? Math.min(100, Math.round((currentPhysicalStock / tankCap) * 100))
+                  : null;
+
+                return (
+                  <div
+                    key={loc.id}
+                    className={`bg-slate-900 border rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition-colors shadow ${
+                      isSolarTank
+                        ? 'border-amber-500/30'
+                        : isPertamaxTank
+                        ? 'border-cyan-500/30'
+                        : isFumigasiBunker
+                        ? 'border-rose-500/30'
+                        : isSprayingWh
+                        ? 'border-emerald-500/30'
+                        : 'border-slate-800'
+                    }`}
+                  >
+                    <div>
+                      {/* Top Badges */}
+                      <div className="flex items-center justify-between text-xs font-mono mb-2">
+                        <span className="font-bold text-amber-400">{loc.code}</span>
+                        <div className="flex items-center gap-1.5">
+                          {isSolarTank && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                              <Fuel className="w-2.5 h-2.5" />
+                              TANGKI SOLAR
+                            </span>
+                          )}
+                          {isPertamaxTank && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
+                              <Fuel className="w-2.5 h-2.5" />
+                              TANGKI PERTAMAX
+                            </span>
+                          )}
+                          {isFumigasiBunker && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
+                              <ShieldAlert className="w-2.5 h-2.5" />
+                              BUNKER FUMIGASI B3
+                            </span>
+                          )}
+                          {isSprayingWh && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                              <Droplet className="w-2.5 h-2.5" />
+                              GUDANG OBAT CAIR
+                            </span>
+                          )}
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              loc.hazmatApproved
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                : 'bg-slate-800 text-slate-400'
+                            }`}
+                          >
+                            {loc.hazmatApproved ? 'IZIN B3 / HAZMAT' : 'STANDAR'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <h3 className="font-bold text-white text-sm line-clamp-1" title={loc.name}>
+                        {loc.name}
+                      </h3>
+                      <div className="text-[11px] font-mono text-slate-400 mt-0.5">
+                        Zona: <strong className="text-slate-300">{loc.zone}</strong>
+                      </div>
+
+                      {/* Capacity details */}
+                      <div className="mt-3 pt-3 border-t border-slate-800/80 space-y-2 text-xs">
+                        <div className="flex justify-between font-mono text-[11px]">
+                          <span className="text-slate-500">Tipe Fasilitas:</span>
+                          <span className="text-slate-300 font-semibold">{loc.type}</span>
+                        </div>
+
+                        {/* Tank capacity highlight */}
+                        {(loc.tankCapacityLiters || tankCap) && (
+                          <div className="p-2 rounded bg-slate-950 border border-slate-800 space-y-1.5">
+                            <div className="flex justify-between items-center text-[11px] font-mono">
+                              <span className="text-slate-400 flex items-center gap-1">
+                                <Fuel className="w-3 h-3 text-amber-400" />
+                                Kapasitas Tangki:
+                              </span>
+                              <span className="text-amber-400 font-bold">
+                                {(loc.tankCapacityLiters || tankCap)?.toLocaleString('id-ID')} Liter
+                              </span>
+                            </div>
+                            {fillPercent !== null && currentPhysicalStock !== null && (
+                              <div>
+                                <div className="flex justify-between text-[10px] font-mono text-slate-400 mb-1">
+                                  <span>Isi Fisik: <strong className="text-white">{currentPhysicalStock.toLocaleString('id-ID')} L</strong></span>
+                                  <span className="text-amber-400 font-bold">{fillPercent}%</span>
+                                </div>
+                                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${
+                                      fillPercent < 20
+                                        ? 'bg-rose-500'
+                                        : fillPercent < 50
+                                        ? 'bg-amber-500'
+                                        : 'bg-emerald-500'
+                                    }`}
+                                    style={{ width: `${fillPercent}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Medicine warehouse capacity highlight */}
+                        {(loc.warehouseCapacitySpec || (!loc.tankCapacityLiters && !tankCap && loc.capacity)) && (
+                          <div className="p-2 rounded bg-slate-950 border border-slate-800 flex justify-between items-center text-[11px] font-mono">
+                            <span className="text-slate-400 flex items-center gap-1">
+                              <Pill className="w-3 h-3 text-emerald-400" />
+                              Kapasitas Gudang:
+                            </span>
+                            <span className="text-emerald-400 font-bold">
+                              {loc.warehouseCapacitySpec || loc.capacity}
+                            </span>
+                          </div>
+                        )}
+
+                        {loc.notes && (
+                          <div className="text-[11px] text-slate-400 bg-slate-950 p-2 rounded border border-slate-800 leading-relaxed">
+                            {loc.notes}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center justify-end gap-2 pt-3 mt-3 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(loc)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-400 hover:text-amber-300 text-xs font-semibold cursor-pointer transition-colors border border-slate-700 shadow-sm"
+                        title="Ubah Kapasitas & Data Lokasi"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Edit Kapasitas</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setDeletingMasterItem({
+                            tab: 'locations',
+                            id: loc.id,
+                            name: loc.name,
+                            codeOrRole: loc.code,
+                          })
+                        }
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 hover:text-rose-300 text-xs font-semibold cursor-pointer transition-colors border border-rose-900/50 shadow-sm"
+                        title="Hapus Data Lokasi / Tangki"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Hapus</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
         </div>
       )}
 
@@ -1055,9 +1393,10 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                     defaultUnit: formData.get('defaultUnit') as string || 'Flask',
                     standardPrice: Number(formData.get('standardPrice')) || 0,
                     packagingSpec: formData.get('packagingSpec') as string,
-                    storageRequirement: (formData.get('storageRequirement') as string) || undefined,
+                    ...(formData.get('warehouseCapacity') ? { warehouseCapacity: formData.get('warehouseCapacity') as string } : {}),
+                    ...(formData.get('storageRequirement') ? { storageRequirement: formData.get('storageRequirement') as string } : {}),
                     status: (formData.get('status') as any) || 'ACTIVE',
-                    notes: (formData.get('notes') as string) || undefined,
+                    ...(formData.get('notes') ? { notes: formData.get('notes') as string } : {}),
                   };
                   onSaveMedicine(medData);
                 } else if (activeTab === 'fuels') {
@@ -1071,11 +1410,12 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                     density: Number(formData.get('density')) || 0.84,
                     flashPoint: formData.get('flashPoint') as string,
                     defaultTankLocation: formData.get('defaultTankLocation') as string,
+                    tankCapacity: Number(formData.get('tankCapacity')) || (editingItem?.tankCapacity ?? (formData.get('fuelCategory') === 'SOLAR_DIESEL' ? 5000 : 2000)),
                     defaultUnit: formData.get('defaultUnit') as string || 'Liter',
                     standardPricePerLiter: Number(formData.get('standardPricePerLiter')) || 0,
                     minimumAlertThreshold: Number(formData.get('minimumAlertThreshold')) || 500,
                     status: (formData.get('status') as any) || 'ACTIVE',
-                    notes: (formData.get('notes') as string) || undefined,
+                    ...(formData.get('notes') ? { notes: formData.get('notes') as string } : {}),
                   };
                   onSaveFuel(fuelData);
                 } else if (activeTab === 'equipment') {
@@ -1095,7 +1435,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                       formData.get('calibrationRequired') === 'on',
                     standardLifespanMonths: Number(formData.get('standardLifespanMonths')) || 36,
                     status: (formData.get('status') as any) || 'ACTIVE',
-                    notes: (formData.get('notes') as string) || undefined,
+                    ...(formData.get('notes') ? { notes: formData.get('notes') as string } : {}),
                   };
                   onSaveEquipment(eqpData);
                 } else if (activeTab === 'suppliers') {
@@ -1108,23 +1448,37 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                     phone: formData.get('phone') as string,
                     email: formData.get('email') as string,
                     address: formData.get('address') as string,
-                    licenseNumber: (formData.get('licenseNumber') as string) || undefined,
+                    ...(formData.get('licenseNumber') ? { licenseNumber: formData.get('licenseNumber') as string } : {}),
                     status: (formData.get('status') as 'ACTIVE' | 'INACTIVE') || 'ACTIVE',
                   };
                   onSaveSupplier(supData);
                 } else if (activeTab === 'locations') {
+                  const storageCategory = (formData.get('storageCategory') as any) || 'UMUM';
+                  const tankCapacityLiters = formData.get('tankCapacityLiters') ? Number(formData.get('tankCapacityLiters')) : undefined;
+                  const warehouseCapacitySpec = (formData.get('warehouseCapacitySpec') as string) || undefined;
+                  let capacity = (formData.get('capacity') as string) || undefined;
+                  if (!capacity) {
+                    if (tankCapacityLiters) {
+                      capacity = `${tankCapacityLiters.toLocaleString('id-ID')} Liter`;
+                    } else if (warehouseCapacitySpec) {
+                      capacity = warehouseCapacitySpec;
+                    }
+                  }
                   const locData: MasterLocation = {
                     id: editingItem?.id || `loc-${Date.now()}`,
                     code: (formData.get('code') as string) || `LOK-${Date.now().toString().slice(-4)}`,
                     name: formData.get('name') as string,
                     zone: formData.get('zone') as string,
                     type: (formData.get('type') as any) || 'RACK',
-                    capacity: (formData.get('capacity') as string) || undefined,
+                    storageCategory,
+                    ...(tankCapacityLiters !== undefined && !isNaN(tankCapacityLiters) ? { tankCapacityLiters } : {}),
+                    ...(warehouseCapacitySpec ? { warehouseCapacitySpec } : {}),
+                    ...(capacity ? { capacity } : {}),
                     hazmatApproved:
                       formData.get('hazmatApproved') === 'true' ||
                       formData.get('hazmatApproved') === 'on',
                     status: 'ACTIVE',
-                    notes: (formData.get('notes') as string) || undefined,
+                    ...(formData.get('notes') ? { notes: formData.get('notes') as string } : {}),
                   };
                   onSaveLocation(locData);
                 } else if (activeTab === 'operators') {
@@ -1134,7 +1488,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                     name: formData.get('name') as string,
                     role: (formData.get('role') as any) || 'GUDANG',
                     phone: formData.get('phone') as string,
-                    licenseNo: (formData.get('licenseNo') as string) || undefined,
+                    ...(formData.get('licenseNo') ? { licenseNo: formData.get('licenseNo') as string } : {}),
                     status: 'ACTIVE',
                   };
                   onSaveOperator(opData);
@@ -1155,7 +1509,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                     name: formData.get('name') as string,
                     symbol: formData.get('symbol') as string,
                     category: (formData.get('category') as any) || 'VOLUME',
-                    description: (formData.get('description') as string) || undefined,
+                    ...(formData.get('description') ? { description: formData.get('description') as string } : {}),
                   };
                   onSaveUnit(unitData);
                 }
@@ -1325,15 +1679,27 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-slate-400 mb-1">Persyaratan Khusus Ruang Penyimpanan</label>
-                    <input
-                      type="text"
-                      name="storageRequirement"
-                      defaultValue={editingItem?.storageRequirement || ''}
-                      placeholder="Contoh: Bunker B3 Karantina, Kedap Udara, Suhu < 30°C"
-                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Persyaratan Khusus Ruang Penyimpanan</label>
+                      <input
+                        type="text"
+                        name="storageRequirement"
+                        defaultValue={editingItem?.storageRequirement || ''}
+                        placeholder="Contoh: Bunker B3 Karantina, Kedap Udara, Suhu < 30°C"
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Kapasitas Alokasi Gudang Obat</label>
+                      <input
+                        type="text"
+                        name="warehouseCapacity"
+                        defaultValue={editingItem?.warehouseCapacity || (editingItem?.category === 'FUMIGASI' ? 'Bunker B3 (2.500 Kg / ±2.500 Flask)' : 'Gudang Cair Spraying (1.500 L)')}
+                        placeholder="Contoh: Bunker B3 (2.500 Kg / ±2.500 Flask)"
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -1459,7 +1825,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                       <input
                         type="text"
                         name="defaultTankLocation"
-                        defaultValue={editingItem?.defaultTankLocation || 'Tangki Utama T-01'}
+                        defaultValue={editingItem?.defaultTankLocation || 'Tangki Utama T-01 (Solar Industri)'}
                         required
                         className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
                       />
@@ -1467,6 +1833,18 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Kapasitas Maksimal Tangki BBM (Liter)</label>
+                      <input
+                        type="number"
+                        name="tankCapacity"
+                        defaultValue={editingItem?.tankCapacity ?? (editingItem?.fuelCategory === 'SOLAR_DIESEL' ? 5000 : editingItem?.fuelCategory === 'BENSIN_GASOLINE' ? 2000 : 1000)}
+                        required
+                        min="100"
+                        placeholder="Contoh: 5000 (Solar) / 2000 (Pertamax)"
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-mono"
+                      />
+                    </div>
                     <div>
                       <label className="block text-slate-400 mb-1">Satuan Ukuran</label>
                       <input
@@ -1477,6 +1855,9 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                         className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
                       />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-slate-400 mb-1">Harga Standar per Satuan (Rp)</label>
                       <input
@@ -1488,9 +1869,6 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                         className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-mono"
                       />
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-slate-400 mb-1">Ambang Peringatan Kritis (Liter)</label>
                       <input
@@ -1502,6 +1880,9 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                         className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-mono"
                       />
                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-slate-400 mb-1">Status Operasional</label>
                       <select
@@ -1513,17 +1894,16 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                         <option value="INACTIVE">Nonaktif / Terkunci</option>
                       </select>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-400 mb-1">Catatan Mutu / Spesifikasi Tangki</label>
-                    <input
-                      type="text"
-                      name="notes"
-                      defaultValue={editingItem?.notes || ''}
-                      placeholder="Opsional: misal kalibrasi flowmeter atau jadwal pembersihan tangki"
-                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                    />
+                    <div>
+                      <label className="block text-slate-400 mb-1">Catatan Mutu / Spesifikasi Tangki</label>
+                      <input
+                        type="text"
+                        name="notes"
+                        defaultValue={editingItem?.notes || ''}
+                        placeholder="Opsional: misal kalibrasi flowmeter atau jadwal pembersihan tangki"
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                      />
+                    </div>
                   </div>
                 </>
               )}
@@ -1827,10 +2207,38 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-400 mb-1">Tipe Penyimpanan</label>
+                      <label className="block text-slate-400 mb-1">Kategori Fasilitas</label>
+                      <select
+                        name="storageCategory"
+                        defaultValue={editingItem?.storageCategory || 'TANGKI_SOLAR'}
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                      >
+                        <option value="TANGKI_SOLAR">Tangki BBM Solar Industri</option>
+                        <option value="TANGKI_PERTAMAX">Tangki BBM Pertamax RON 92</option>
+                        <option value="GUDANG_OBAT_FUMIGASI">Bunker Obat Fumigasi (B3)</option>
+                        <option value="GUDANG_OBAT_SPRAYING">Gudang Obat Cair Spraying & Fogging</option>
+                        <option value="UMUM">Fasilitas / Rak Penyimpanan Lainnya</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Nama Fasilitas / Tangki / Gudang</label>
+                      <input
+                        type="text"
+                        name="name"
+                        defaultValue={editingItem?.name || ''}
+                        placeholder="Contoh: Tangki Utama T-01 (Solar Industri)"
+                        required
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Tipe Fasilitas Fisik</label>
                       <select
                         name="type"
-                        defaultValue={editingItem?.type || 'RACK'}
+                        defaultValue={editingItem?.type || 'TANK'}
                         className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
                       >
                         <option value="TANK">Tangki Pendam / Tank Yard</option>
@@ -1840,18 +2248,6 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                         <option value="GENERAL">Area Terbuka / Gudang Umum</option>
                       </select>
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-400 mb-1">Nama Lokasi / Nama Tangki</label>
-                    <input
-                      type="text"
-                      name="name"
-                      defaultValue={editingItem?.name || ''}
-                      placeholder="Contoh: Tangki Utama T-01 (Solar Industri)"
-                      required
-                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
-                    />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -1867,12 +2263,36 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-400 mb-1">Kapasitas Maksimal</label>
+                      <label className="block text-slate-400 mb-1">Kapasitas Tangki BBM (Liter)</label>
+                      <input
+                        type="number"
+                        name="tankCapacityLiters"
+                        defaultValue={editingItem?.tankCapacityLiters ?? ''}
+                        placeholder="Contoh: 5000 (Solar) / 2000 (Pertamax)"
+                        min="0"
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-400 mb-1">Kapasitas Spesifikasi Gudang Obat</label>
+                      <input
+                        type="text"
+                        name="warehouseCapacitySpec"
+                        defaultValue={editingItem?.warehouseCapacitySpec || ''}
+                        placeholder="Contoh: 2.500 Kg / ±2.500 Flask"
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 mb-1">Ringkasan Kapasitas (Otomatis / Kustom)</label>
                       <input
                         type="text"
                         name="capacity"
                         defaultValue={editingItem?.capacity || ''}
-                        placeholder="Contoh: 5.000 Liter / 150 Box"
+                        placeholder="Contoh: 5.000 Liter atau 2.500 Kg"
                         className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-white"
                       />
                     </div>
