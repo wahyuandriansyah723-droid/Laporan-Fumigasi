@@ -3,11 +3,25 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
+const rawConfig = firebaseConfig as Record<string, any>;
+
+export const activeFirebaseConfig = {
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || rawConfig.projectId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || rawConfig.appId,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || rawConfig.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || rawConfig.authDomain,
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || rawConfig.firestoreDatabaseId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || rawConfig.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || rawConfig.messagingSenderId,
+};
+
 // Initialize Firebase instance
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+const app = !getApps().length ? initializeApp(activeFirebaseConfig) : getApps()[0];
 
 // CRITICAL: Must pass firestoreDatabaseId to getFirestore
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId);
+export const db = activeFirebaseConfig.firestoreDatabaseId
+  ? getFirestore(app, activeFirebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
 export const auth = getAuth(app);
 
 export enum OperationType {

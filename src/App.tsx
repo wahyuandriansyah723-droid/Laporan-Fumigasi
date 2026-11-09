@@ -147,47 +147,47 @@ export default function App() {
     seedDatabaseIfEmpty();
 
     const unsubItems = subscribeInventoryItems((data) => {
-      if (data && data.length > 0) setItems(data);
+      setItems(data || []);
     });
     const unsubTrx = subscribeStockTransactions((data) => {
-      setTransactions(data);
+      setTransactions(data || []);
     });
     const unsubJobs = subscribeJobReports((data) => {
-      if (data && data.length > 0) setJobReports(data);
+      setJobReports(data || []);
     });
     const unsubRecs = subscribeRawRecommendations((data) => {
-      if (data && data.length > 0) setRawRecommendations(data);
+      setRawRecommendations(data || []);
     });
     const unsubUsers = subscribeAuthUsers((data) => {
-      if (data && data.length > 0) setAuthUsers(data);
+      setAuthUsers(data || []);
     });
     const unsubSettings = subscribeSystemSettings((data) => {
       if (data && data.companyName) setSettings(data);
     });
 
     const unsubSuppliers = subscribeMasterCollection<MasterSupplier>(COLLECTIONS.SUPPLIERS, (data) => {
-      if (data && data.length > 0) setSuppliers(data);
+      setSuppliers(data || []);
     });
     const unsubLocations = subscribeMasterCollection<MasterLocation>(COLLECTIONS.LOCATIONS, (data) => {
-      if (data && data.length > 0) setLocations(data);
+      setLocations(data || []);
     });
     const unsubOperators = subscribeMasterCollection<MasterOperator>(COLLECTIONS.OPERATORS, (data) => {
-      if (data && data.length > 0) setOperators(data);
+      setOperators(data || []);
     });
     const unsubDestinations = subscribeMasterCollection<MasterProjectDestination>(COLLECTIONS.DESTINATIONS, (data) => {
-      if (data && data.length > 0) setDestinations(data);
+      setDestinations(data || []);
     });
     const unsubUnits = subscribeMasterCollection<MasterUnit>(COLLECTIONS.UNITS, (data) => {
-      if (data && data.length > 0) setUnits(data);
+      setUnits(data || []);
     });
     const unsubMedicines = subscribeMasterCollection<MasterChemicalMedicine>(COLLECTIONS.MEDICINES, (data) => {
-      if (data && data.length > 0) setMedicines(data);
+      setMedicines(data || []);
     });
     const unsubFuels = subscribeMasterCollection<MasterFuelType>(COLLECTIONS.FUELS, (data) => {
-      if (data && data.length > 0) setFuels(data);
+      setFuels(data || []);
     });
     const unsubEquipment = subscribeMasterCollection<MasterEquipmentInventory>(COLLECTIONS.EQUIPMENT, (data) => {
-      if (data && data.length > 0) setEquipment(data);
+      setEquipment(data || []);
     });
 
     return () => {
@@ -1832,6 +1832,19 @@ export default function App() {
             <div className="hidden xl:flex items-center gap-1.5 text-xs font-mono text-slate-400 bg-slate-950 px-2.5 py-1.5 rounded-lg border border-slate-800">
               <Clock className="w-3.5 h-3.5 text-amber-400" />
               <span>{currentTime}</span>
+            </div>
+
+            {/* Cloud Firestore Live Sync Status */}
+            <div
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/40 text-[11px] font-medium text-emerald-300"
+              title="Cloud Database Aktif & Real-time: Data terhubung langsung dua arah antara AI Studio dan Vercel (Hapus, Edit, dan Simpan otomatis sinkron)"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="font-mono font-semibold hidden lg:inline">Cloud Sync:</span>
+              <span className="text-emerald-400 font-bold">Real-time</span>
             </div>
 
             {/* Admin: Quick Cross-Check Button */}
