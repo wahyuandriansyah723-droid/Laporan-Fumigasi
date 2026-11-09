@@ -34,6 +34,7 @@ import {
   Receipt,
   FileText,
   RefreshCw,
+  X,
 } from 'lucide-react';
 
 // =========================================================================
@@ -429,6 +430,7 @@ interface FuelsSectionProps {
   items?: InventoryItem[];
   onOpenTransactionModal?: (item: InventoryItem, defaultType?: 'IN' | 'OUT') => void;
   onNavigateToMutations?: (searchQuery?: string) => void;
+  onEmptyTank?: (itemId: string, reason?: string) => void;
 }
 
 export const FuelsSection: React.FC<FuelsSectionProps> = ({
@@ -440,8 +442,13 @@ export const FuelsSection: React.FC<FuelsSectionProps> = ({
   items = [],
   onOpenTransactionModal,
   onNavigateToMutations,
+  onEmptyTank,
 }) => {
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+  const [emptyingItem, setEmptyingItem] = useState<InventoryItem | null>(null);
+  const [emptyReason, setEmptyReason] = useState<string>('Kuras & Pembersihan Tangki Berkala');
+  const [emptyCustomNotes, setEmptyCustomNotes] = useState<string>('');
+  const [isSubmittingEmpty, setIsSubmittingEmpty] = useState<boolean>(false);
 
   const filtered = fuels.filter((f) => {
     if (categoryFilter !== 'ALL' && f.fuelCategory !== categoryFilter) return false;
@@ -717,7 +724,7 @@ export const FuelsSection: React.FC<FuelsSectionProps> = ({
 
                     if (linkedItem && onOpenTransactionModal) {
                       return (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <button
                             type="button"
                             onClick={() => onOpenTransactionModal(linkedItem, 'OUT')}
@@ -736,6 +743,29 @@ export const FuelsSection: React.FC<FuelsSectionProps> = ({
                             <ArrowDownRight className="w-3.5 h-3.5 text-emerald-400" />
                             <span>Isi Tangki (IN)</span>
                           </button>
+                          {onEmptyTank && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEmptyingItem(linkedItem);
+                                setEmptyReason('Kuras & Pembersihan Tangki Berkala');
+                                setEmptyCustomNotes('');
+                              }}
+                              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors border ${
+                                linkedItem.currentStock <= 0
+                                  ? 'bg-slate-800/80 text-slate-500 border-slate-700'
+                                  : 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border-rose-800/50 hover:border-rose-600'
+                              }`}
+                              title={
+                                linkedItem.currentStock <= 0
+                                  ? `Tangki ${linkedItem.name} sudah kosong (0 Liter)`
+                                  : `Kosongkan / kuras seluruh isi tangki ${linkedItem.name}`
+                              }
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                              <span>Kosongkan Tangki</span>
+                            </button>
+                          )}
                         </div>
                       );
                     } else if (onCreateInventory) {
@@ -800,6 +830,151 @@ export const FuelsSection: React.FC<FuelsSectionProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ================= MODAL: KOSONGKAN TANGKI BBM (FUELS SECTION) ================= */}
+      {emptyingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-rose-500/50 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden text-slate-100 space-y-0">
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    Kosongkan Tangki BBM
+                  </h3>
+                  <p className="text-xs text-rose-400 font-mono">
+                    {emptyingItem.name} ({emptyingItem.sku})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmptyingItem(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4">
+              {/* Alert Callout */}
+              <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/40 flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <p className="font-bold text-rose-200">
+                    Konfirmasi Pengosongan / Kuras Tangki
+                  </p>
+                  <p className="text-slate-300">
+                    Stok fisik saat ini sebanyak{' '}
+                    <strong className="text-rose-400 font-mono font-bold">
+                      {emptyingItem.currentStock.toLocaleString('id-ID')} {emptyingItem.unit}
+                    </strong>{' '}
+                    akan dikuras dan direset menjadi{' '}
+                    <strong className="text-white font-mono font-bold">0 {emptyingItem.unit}</strong>.
+                  </p>
+                  <p className="text-slate-400 text-[11px]">
+                    Sistem akan otomatis mencatat riwayat transaksi mutasi pengeluaran (OUT) kuras tangki untuk keperluan audit gudang.
+                  </p>
+                </div>
+              </div>
+
+              {/* Reason Selector */}
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Alasan / Keterangan Pengosongan Tangki:
+                </label>
+                <select
+                  value={emptyReason}
+                  onChange={(e) => setEmptyReason(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-rose-500 font-sans cursor-pointer"
+                >
+                  <option value="Kuras & Pembersihan Tangki Berkala">
+                    Kuras &amp; Pembersihan Tangki Berkala
+                  </option>
+                  <option value="Pergantian Batch / Kualitas BBM Baru">
+                    Pergantian Batch / Kualitas BBM Baru
+                  </option>
+                  <option value="Kalibrasi Ulang Sensor Level Tangki">
+                    Kalibrasi Ulang Sensor Level Tangki
+                  </option>
+                  <option value="Perawatan & Inspeksi Fisik Tangki Bocor">
+                    Perawatan &amp; Inspeksi Fisik Tangki Bocor
+                  </option>
+                  <option value="Koreksi Fisik (Stok Tangki Nyata Kosong)">
+                    Koreksi Fisik (Stok Tangki Nyata Kosong)
+                  </option>
+                  <option value="LAINNYA">Alasan Lainnya (Tulis Manual)</option>
+                </select>
+              </div>
+
+              {emptyReason === 'LAINNYA' && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Tulis Alasan Pengosongan:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={emptyCustomNotes}
+                    onChange={(e) => setEmptyCustomNotes(e.target.value)}
+                    placeholder="Contoh: Pemindahan tangki ke lokasi proyek B..."
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-rose-500"
+                  />
+                </div>
+              )}
+
+              {/* Modal Actions */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEmptyingItem(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={emptyingItem.currentStock <= 0 || isSubmittingEmpty}
+                  onClick={async () => {
+                    if (emptyingItem.currentStock <= 0) {
+                      setEmptyingItem(null);
+                      return;
+                    }
+                    setIsSubmittingEmpty(true);
+                    const finalReason =
+                      emptyReason === 'LAINNYA'
+                        ? emptyCustomNotes.trim() || 'Pengosongan Tangki Manual'
+                        : emptyReason;
+                    if (onEmptyTank) {
+                      await onEmptyTank(emptyingItem.id, finalReason);
+                    }
+                    setIsSubmittingEmpty(false);
+                    setEmptyingItem(null);
+                  }}
+                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md cursor-pointer ${
+                    emptyingItem.currentStock <= 0
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/30'
+                  }`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>
+                    {emptyingItem.currentStock <= 0
+                      ? 'Tangki Sudah Kosong'
+                      : isSubmittingEmpty
+                      ? 'Mengosongkan...'
+                      : 'Ya, Kosongkan Tangki (0 L)'}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

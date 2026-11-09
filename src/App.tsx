@@ -578,6 +578,55 @@ export default function App() {
     );
   };
 
+  // Handler: Kosongkan Tangki BBM (Pertamax & Solar) to 0 Liter
+  const handleEmptyTank = async (
+    itemId: string,
+    reason: string = 'Kuras & Pembersihan Tangki Berkala'
+  ) => {
+    const targetItem = items.find((i) => i.id === itemId);
+    if (!targetItem) return;
+
+    const previousStock = targetItem.currentStock;
+    if (previousStock <= 0) {
+      showToast(`Tangki ${targetItem.name} sudah dalam keadaan kosong (0 ${targetItem.unit}).`);
+      return;
+    }
+
+    const dateStr = new Date().toISOString();
+
+    // 1. Update item physical stock to 0
+    const updatedItem: InventoryItem = {
+      ...targetItem,
+      currentStock: 0,
+      lastUpdated: dateStr.replace('T', ' ').slice(0, 16),
+    };
+    await saveInventoryItem(updatedItem);
+
+    // 2. Record transaction as OUT so audit trail is preserved
+    const newTrx: StockTransaction = {
+      id: `trx-empty-${Date.now()}-${targetItem.id}`,
+      timestamp: dateStr,
+      type: 'OUT',
+      itemId: targetItem.id,
+      sku: targetItem.sku,
+      itemName: targetItem.name,
+      category: targetItem.category,
+      quantity: previousStock,
+      unit: targetItem.unit,
+      previousStock: previousStock,
+      newStock: 0,
+      referenceNo: `KURAS-TANK-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
+      projectOrLocation: targetItem.location || 'Tangki BBM Gudang',
+      operator: currentUser ? `${currentUser.name} (${currentUser.role})` : 'Petugas Lapangan',
+      notes: `Pengosongan Tangki: ${reason} (Sebelumnya: ${previousStock.toLocaleString('id-ID')} ${targetItem.unit})`,
+    };
+    await saveStockTransaction(newTrx);
+
+    showToast(
+      `Tangki ${targetItem.name} berhasil dikosongkan (0 ${targetItem.unit}). Transaksi pengosongan tercatat di riwayat mutasi.`
+    );
+  };
+
   // Handler: Apply Stock Opname Adjustments
   const handleApplyOpname = async (
     adjustments: {
@@ -2057,6 +2106,7 @@ export default function App() {
               setIsSuratJalanOpen(true);
             }}
             onUpdateTankCapacity={handleUpdateTankCapacity}
+            onEmptyTank={handleEmptyTank}
           />
         )}
 
@@ -2177,6 +2227,16 @@ export default function App() {
             onSaveUnit={handleSaveUnit}
             onDeleteUnit={handleDeleteUnit}
             onCreateInventoryFromMaster={handleCreateInventoryFromMaster}
+            items={items}
+            onOpenTransactionModal={(item, type) => {
+              setTrxDefaultItem(item);
+              setTrxDefaultType(type || 'OUT');
+              setIsTrxModalOpen(true);
+            }}
+            onNavigateToMutations={(query) => {
+              setCurrentTab('mutations');
+            }}
+            onEmptyTank={handleEmptyTank}
             currentUser={currentUser}
           />
         )}

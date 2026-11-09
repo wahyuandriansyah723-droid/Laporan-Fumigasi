@@ -404,7 +404,7 @@ export const saveSystemSettings = async (settings: SystemSettings): Promise<void
 // 8. AUTO-SEED DATABASE IF EMPTY ON FIRST BOOT
 export const seedDatabaseIfEmpty = async (): Promise<void> => {
   try {
-    // Check if items collection is empty
+    // 1. Check inventory items: seed if empty or upsert any missing initial items
     const itemSnap = await getDocs(collection(db, COLLECTIONS.ITEMS));
     if (itemSnap.empty) {
       console.log('Seeding initial inventory items to Firestore...');
@@ -413,9 +413,20 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
         batch.set(doc(db, COLLECTIONS.ITEMS, it.id), sanitizeForFirestore(it));
       });
       await batch.commit();
+    } else {
+      const existingItemIds = new Set(itemSnap.docs.map((d) => d.id));
+      const missingItems = INITIAL_ITEMS.filter((it) => !existingItemIds.has(it.id));
+      if (missingItems.length > 0) {
+        console.log(`Syncing ${missingItems.length} new inventory items to Firestore...`);
+        const batch = writeBatch(db);
+        missingItems.forEach((it) => {
+          batch.set(doc(db, COLLECTIONS.ITEMS, it.id), sanitizeForFirestore(it));
+        });
+        await batch.commit();
+      }
     }
 
-    // Check transactions
+    // 2. Check transactions: seed if empty or upsert missing initial transactions
     const trxSnap = await getDocs(collection(db, COLLECTIONS.TRANSACTIONS));
     if (trxSnap.empty) {
       console.log('Seeding initial transactions to Firestore...');
@@ -424,9 +435,20 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
         batch.set(doc(db, COLLECTIONS.TRANSACTIONS, trx.id), sanitizeForFirestore(trx));
       });
       await batch.commit();
+    } else {
+      const existingTrxIds = new Set(trxSnap.docs.map((d) => d.id));
+      const missingTrx = INITIAL_TRANSACTIONS.filter((trx) => !existingTrxIds.has(trx.id));
+      if (missingTrx.length > 0) {
+        console.log(`Syncing ${missingTrx.length} initial stock transactions to Firestore...`);
+        const batch = writeBatch(db);
+        missingTrx.forEach((trx) => {
+          batch.set(doc(db, COLLECTIONS.TRANSACTIONS, trx.id), sanitizeForFirestore(trx));
+        });
+        await batch.commit();
+      }
     }
 
-    // Check users
+    // 3. Check users
     const userSnap = await getDocs(collection(db, COLLECTIONS.USERS));
     if (userSnap.empty) {
       console.log('Seeding initial auth users to Firestore...');
@@ -437,7 +459,7 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       await batch.commit();
     }
 
-    // Check job reports
+    // 4. Check job reports
     const jobSnap = await getDocs(collection(db, COLLECTIONS.JOB_REPORTS));
     if (jobSnap.empty) {
       console.log('Seeding initial job reports to Firestore...');
@@ -448,7 +470,7 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       await batch.commit();
     }
 
-    // Check recommendations
+    // 5. Check recommendations
     const recSnap = await getDocs(collection(db, COLLECTIONS.RECOMMENDATIONS));
     if (recSnap.empty) {
       console.log('Seeding initial recommendations to Firestore...');
@@ -459,13 +481,13 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       await batch.commit();
     }
 
-    // Check system settings
+    // 6. Check system settings
     const settingSnap = await getDocs(collection(db, COLLECTIONS.SETTINGS));
     if (settingSnap.empty) {
       await setDoc(doc(db, COLLECTIONS.SETTINGS, 'default_setting'), sanitizeForFirestore(INITIAL_SYSTEM_SETTINGS));
     }
 
-    // Check master data
+    // 7. Check master data
     const supSnap = await getDocs(collection(db, COLLECTIONS.SUPPLIERS));
     if (supSnap.empty) {
       const b = writeBatch(db);
@@ -501,11 +523,21 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       await b.commit();
     }
 
+    // Check master medicines: seed or sync missing medicines
     const medSnap = await getDocs(collection(db, COLLECTIONS.MEDICINES));
     if (medSnap.empty) {
       const b = writeBatch(db);
       INITIAL_CHEMICAL_MEDICINES.forEach((m) => b.set(doc(db, COLLECTIONS.MEDICINES, m.id), sanitizeForFirestore(m)));
       await b.commit();
+    } else {
+      const existingMedIds = new Set(medSnap.docs.map((d) => d.id));
+      const missingMeds = INITIAL_CHEMICAL_MEDICINES.filter((m) => !existingMedIds.has(m.id));
+      if (missingMeds.length > 0) {
+        console.log(`Syncing ${missingMeds.length} new master medicines to Firestore...`);
+        const b = writeBatch(db);
+        missingMeds.forEach((m) => b.set(doc(db, COLLECTIONS.MEDICINES, m.id), sanitizeForFirestore(m)));
+        await b.commit();
+      }
     }
 
     const fuelSnap = await getDocs(collection(db, COLLECTIONS.FUELS));
@@ -522,7 +554,7 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       await b.commit();
     }
 
-    console.log('✓ Firestore initial seeding check complete.');
+    console.log('✓ Firestore initial seeding and chemical sync check complete.');
   } catch (err) {
     console.error('Error seeding initial Firestore data:', err);
   }

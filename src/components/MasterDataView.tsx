@@ -92,6 +92,7 @@ interface MasterDataViewProps {
   items?: InventoryItem[];
   onOpenTransactionModal?: (item: InventoryItem, defaultType?: 'IN' | 'OUT') => void;
   onNavigateToMutations?: (searchQuery?: string) => void;
+  onEmptyTank?: (itemId: string, reason?: string) => void;
   currentUser?: AuthUser;
 }
 
@@ -150,6 +151,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
   items = [],
   onOpenTransactionModal,
   onNavigateToMutations,
+  onEmptyTank,
   currentUser,
 }) => {
   const [activeTab, setActiveTab] = useState<MasterTab>('medicines');
@@ -510,6 +512,7 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
           items={items}
           onOpenTransactionModal={onOpenTransactionModal}
           onNavigateToMutations={onNavigateToMutations}
+          onEmptyTank={onEmptyTank}
         />
       )}
 

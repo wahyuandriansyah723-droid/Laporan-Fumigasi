@@ -70,6 +70,7 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
   const [deleteAllScope, setDeleteAllScope] = useState<'ALL' | 'FUMIGASI' | 'SPRAYING_FOGGING'>('ALL');
   const [filterRawMaterial, setFilterRawMaterial] = useState<string>('ALL');
   const [filterLocation, setFilterLocation] = useState<string>('ALL');
+  const [filterOperator, setFilterOperator] = useState<string>('ALL');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
   const [filterEndDate, setFilterEndDate] = useState<string>('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
@@ -293,6 +294,15 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [jobReports]);
 
+  // Unique options for Petugas Lapangan / Operator
+  const operatorOptions = useMemo(() => {
+    const set = new Set<string>();
+    jobReports.forEach((j) => {
+      if (j.operatorName && j.operatorName.trim()) set.add(j.operatorName.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [jobReports]);
+
   // Enhanced Filtered Jobs Logic
   const filteredJobs = useMemo(() => {
     return jobReports.filter((job) => {
@@ -336,8 +346,15 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
         return false;
       }
 
-      // 6. Rentang Tanggal Tutup / Injeksi
-      const jobDate = job.closingDate || job.executionDate;
+      // 6. Nama Petugas / Operator Lapangan
+      if (filterOperator !== 'ALL') {
+        const op = (job.operatorName || '').trim();
+        if (op !== filterOperator) return false;
+      }
+
+      // 7. Rentang Tanggal (Tanggal Tutup / Pelaksanaan / Permintaan / Pembukaan)
+      const rawJobDate = job.closingDate || job.executionDate || job.requestDate || job.openingDate;
+      const jobDate = rawJobDate ? rawJobDate.slice(0, 10) : '';
       if (filterStartDate && jobDate && jobDate < filterStartDate) {
         return false;
       }
@@ -354,6 +371,7 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
     filterType,
     filterRawMaterial,
     filterLocation,
+    filterOperator,
     filterStartDate,
     filterEndDate,
   ]);
@@ -362,21 +380,23 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
   const isFilterActive =
     searchQuery.trim() !== '' ||
     filterRecommendation !== 'ALL' ||
-    filterType !== 'ALL' ||
+    filterType !== (forcedJobType || 'ALL') ||
     filterRawMaterial !== 'ALL' ||
     filterLocation !== 'ALL' ||
+    filterOperator !== 'ALL' ||
     filterStartDate !== '' ||
     filterEndDate !== '';
 
   const handleResetFilters = () => {
     setSearchQuery('');
     setFilterRecommendation('ALL');
-    setFilterType('ALL');
+    setFilterType(forcedJobType || 'ALL');
     setFilterRawMaterial('ALL');
     setFilterLocation('ALL');
+    setFilterOperator('ALL');
     setFilterStartDate('');
     setFilterEndDate('');
-    onShowToast('Filter berhasil dibersihkan.');
+    onShowToast('Filter pencarian berhasil dibersihkan.');
   };
 
   // Export to CSV helper
@@ -721,8 +741,8 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
 
       {/* FILTER TOOLBAR UTAMA */}
       <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 space-y-3 shadow-md">
-        {/* Row 1: Search & Dropdown Filters */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+        {/* Row 1: Search & Dropdown Filters (Termasuk Nama Petugas) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 text-xs">
           {/* Quick Search */}
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -730,14 +750,14 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari SPK, Bahan Baku, Klien..."
+              placeholder="Cari SPK, Bahan Baku, Petugas..."
               className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -749,11 +769,32 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
             <select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+              disabled={!!forcedJobType}
+              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-emerald-500 cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
             >
               <option value="ALL">Semua Jenis Pekerjaan</option>
               <option value="FUMIGASI">Fumigasi Kapal / Gudang</option>
               <option value="SPRAYING_FOGGING">Spraying &amp; Fogging</option>
+            </select>
+          </div>
+
+          {/* Filter Nama Petugas Lapangan */}
+          <div>
+            <select
+              value={filterOperator}
+              onChange={(e) => setFilterOperator(e.target.value)}
+              className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-white focus:outline-none focus:border-emerald-500 cursor-pointer ${
+                filterOperator !== 'ALL'
+                  ? 'border-emerald-500 text-emerald-300 font-semibold bg-emerald-950/20'
+                  : 'border-slate-700'
+              }`}
+            >
+              <option value="ALL">Semua Petugas Lapangan ({operatorOptions.length})</option>
+              {operatorOptions.map((op) => (
+                <option key={op} value={op}>
+                  {op}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -764,7 +805,7 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
               onChange={(e) => setFilterRawMaterial(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
             >
-              <option value="ALL">Semua Bahan Baku / Komoditas</option>
+              <option value="ALL">Semua Bahan Baku ({rawMaterialOptions.length})</option>
               {rawMaterialOptions.map((mat) => (
                 <option key={mat} value={mat}>
                   {mat}
@@ -780,7 +821,7 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
               onChange={(e) => setFilterLocation(e.target.value)}
               className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
             >
-              <option value="ALL">Semua Gudang / Lokasi</option>
+              <option value="ALL">Semua Gudang / Lokasi ({locationOptions.length})</option>
               {locationOptions.map((loc) => (
                 <option key={loc} value={loc}>
                   {loc}
@@ -790,7 +831,109 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
           </div>
         </div>
 
-        {/* Row 2: Status Pills, Advanced Date Filter Toggle, and Reset */}
+        {/* Row 2: Rentang Tanggal Filter Bar (Langsung & Cepat) */}
+        <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5 shrink-0">
+              <Calendar className="w-3.5 h-3.5 text-blue-400" />
+              <span>Rentang Tanggal:</span>
+            </span>
+
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={filterStartDate}
+                onChange={(e) => setFilterStartDate(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
+                title="Dari tanggal"
+              />
+              <span className="text-slate-500 font-mono text-[11px]">s/d</span>
+              <input
+                type="date"
+                value={filterEndDate}
+                onChange={(e) => setFilterEndDate(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
+                title="Sampai tanggal"
+              />
+            </div>
+
+            {/* Quick Date Presets */}
+            <div className="flex items-center gap-1 text-[11px] flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  const today = new Date().toISOString().slice(0, 10);
+                  setFilterStartDate(today);
+                  setFilterEndDate(today);
+                }}
+                className={`px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                  filterStartDate === new Date().toISOString().slice(0, 10) &&
+                  filterEndDate === new Date().toISOString().slice(0, 10)
+                    ? 'bg-blue-600 text-white font-bold'
+                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                Hari Ini
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  d.setDate(d.getDate() - 7);
+                  setFilterStartDate(d.toISOString().slice(0, 10));
+                  setFilterEndDate(new Date().toISOString().slice(0, 10));
+                }}
+                className="px-2 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors cursor-pointer"
+              >
+                7 Hari Terakhir
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const now = new Date();
+                  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+                  setFilterStartDate(firstDay);
+                  setFilterEndDate(now.toISOString().slice(0, 10));
+                }}
+                className="px-2 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors cursor-pointer"
+              >
+                Bulan Ini
+              </button>
+
+              {(filterStartDate || filterEndDate) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterStartDate('');
+                    setFilterEndDate('');
+                  }}
+                  className="px-2 py-1 rounded-md bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30 transition-colors cursor-pointer flex items-center gap-1"
+                  title="Hapus filter rentang tanggal"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Hapus Tanggal</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Reset All Filters Button */}
+          {isFilterActive && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="px-3 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm shrink-0"
+              title="Bersihkan seluruh filter dan kembali ke tampilan awal"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>Reset Semua Filter</span>
+            </button>
+          )}
+        </div>
+
+        {/* Row 3: Status QC Pills & Result Counter */}
         <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-800 text-xs">
           {/* Status QC Pills */}
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -800,7 +943,7 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
               { id: 'PENDING', label: 'Menunggu Review' },
               { id: 'OK', label: 'Rekomendasi OK' },
               { id: 'BELUM_OK', label: 'Belum OK' },
-              { id: 'FUMIGASI_ULANG', label: 'Fumigasi Ulang' },
+              { id: 'FUMIGASI_ULANG', label: forcedJobType === 'SPRAYING_FOGGING' ? 'Fogging Ulang' : 'Perlakuan Ulang' },
             ].map((st) => (
               <button
                 key={st.id}
@@ -817,132 +960,19 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
             ))}
           </div>
 
-          {/* Right Side: Toggle Filter Tanggal & Reset */}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-              className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-                showAdvancedFilters || filterStartDate || filterEndDate
-                  ? 'bg-blue-600/20 text-blue-300 border-blue-500/40'
-                  : 'bg-slate-950 text-slate-400 hover:text-slate-200 border-slate-800'
-              }`}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>{showAdvancedFilters ? 'Tutup Filter Tanggal' : 'Filter Tanggal'}</span>
-              {(filterStartDate || filterEndDate) && (
-                <span className="w-2 h-2 rounded-full bg-blue-400" />
-              )}
-            </button>
-
+          {/* Active Filter Indicator & Count */}
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <div>
+              Menampilkan <strong className="text-white">{filteredJobs.length}</strong> dari{' '}
+              <span className="text-slate-300">{jobReports.length}</span> laporan
+              {isFilterActive && <span className="ml-1 text-emerald-400 font-semibold">(Tersaring)</span>}
+            </div>
             {isFilterActive && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                title="Bersihkan semua filter"
-              >
-                <RefreshCw className="w-3 h-3" />
-                <span>Reset Filter</span>
-              </button>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                Filter Aktif
+              </span>
             )}
           </div>
-        </div>
-
-        {/* Collapsible Date Range Filter */}
-        {showAdvancedFilters && (
-          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 animate-in fade-in duration-150 space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-blue-400" />
-                Filter Berdasarkan Tanggal Tutup / Pengerjaan:
-              </span>
-              <div className="flex items-center gap-1 text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const today = new Date().toISOString().slice(0, 10);
-                    setFilterStartDate(today);
-                    setFilterEndDate(today);
-                  }}
-                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-                >
-                  Hari Ini
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = new Date();
-                    d.setDate(d.getDate() - 7);
-                    setFilterStartDate(d.toISOString().slice(0, 10));
-                    setFilterEndDate(new Date().toISOString().slice(0, 10));
-                  }}
-                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-                >
-                  7 Hari Terakhir
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const now = new Date();
-                    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-                    setFilterStartDate(firstDay);
-                    setFilterEndDate(now.toISOString().slice(0, 10));
-                  }}
-                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-                >
-                  Bulan Ini
-                </button>
-                {(filterStartDate || filterEndDate) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFilterStartDate('');
-                      setFilterEndDate('');
-                    }}
-                    className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 hover:bg-rose-500/30"
-                  >
-                    Hapus Tanggal
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Dari Tanggal:</label>
-                <input
-                  type="date"
-                  value={filterStartDate}
-                  onChange={(e) => setFilterStartDate(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Sampai Tanggal:</label>
-                <input
-                  type="date"
-                  value={filterEndDate}
-                  onChange={(e) => setFilterEndDate(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Results Counter / Active Filter Bar */}
-        <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
-          <div>
-            Menampilkan <strong className="text-white">{filteredJobs.length}</strong> dari{' '}
-            <span className="text-slate-300">{jobReports.length}</span> laporan pekerjaan
-            {isFilterActive && <span className="ml-1 text-emerald-400 font-semibold">(Tersaring)</span>}
-          </div>
-          {isFilterActive && (
-            <div className="text-[11px] text-slate-400">
-              Mode Filter Aktif
-            </div>
-          )}
         </div>
       </div>
 

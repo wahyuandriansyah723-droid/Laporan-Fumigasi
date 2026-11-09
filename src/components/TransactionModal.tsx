@@ -42,12 +42,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onSaveTransaction,
 }) => {
   const isOperator = currentUser?.role === 'OPERATOR';
-  const getTodayISOString = () => {
+  const getTodayDateString = () => {
     const d = new Date();
     const tzOffset = d.getTimezoneOffset() * 60000;
-    return new Date(d.getTime() - tzOffset).toISOString().slice(0, 16);
+    return new Date(d.getTime() - tzOffset).toISOString().slice(0, 10);
   };
-  const [transactionDateTime, setTransactionDateTime] = useState<string>(getTodayISOString);
+  const [transactionDate, setTransactionDate] = useState<string>(getTodayDateString);
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [trxType, setTrxType] = useState<TransactionType>(isOperator ? 'OUT' : defaultType);
   const [quantity, setQuantity] = useState<string>('');
@@ -57,6 +57,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [batchNo, setBatchNo] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [searchFilter, setSearchFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>(defaultItem ? defaultItem.category : 'ALL');
 
   useEffect(() => {
     if (defaultItem) {
@@ -134,7 +135,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       operator: operator.trim() || 'Petugas Gudang',
       batchNo: batchNo.trim() || undefined,
       notes: notes.trim() || undefined,
-      timestamp: transactionDateTime ? new Date(transactionDateTime).toISOString() : undefined,
+      timestamp: transactionDate
+        ? new Date(`${transactionDate}T12:00:00`).toISOString()
+        : new Date().toISOString(),
     });
 
     onClose();
@@ -142,10 +145,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const filteredItems = items.filter((it) => {
     if (isOperator && it.category === 'PERLENGKAPAN') return false;
+    if (categoryFilter !== 'ALL' && it.category !== categoryFilter) return false;
+    if (!searchFilter) return true;
+    const q = searchFilter.toLowerCase();
     return (
-      it.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      it.sku.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      it.category.toLowerCase().includes(searchFilter.toLowerCase())
+      it.name.toLowerCase().includes(q) ||
+      it.sku.toLowerCase().includes(q) ||
+      it.category.toLowerCase().includes(q) ||
+      (it.activeIngredients && it.activeIngredients.toLowerCase().includes(q))
     );
   });
 
@@ -238,17 +245,78 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
           {/* Select Item */}
           <div>
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <label className="text-xs font-medium text-slate-300">
-                Pilih Barang / Komoditas
+                Pilih Barang / Komoditas Obat &amp; BBM
               </label>
               <input
                 type="text"
-                placeholder="Cari SKU atau nama..."
+                placeholder="Cari SKU, nama, bahan aktif..."
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
-                className="text-xs px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 w-44"
+                className="text-xs px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 w-full sm:w-52"
               />
+            </div>
+
+            {/* Category Quick Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 mb-2 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('ALL')}
+                className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                  categoryFilter === 'ALL'
+                    ? 'bg-slate-700 text-white font-bold'
+                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                Semua Kategori
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('FUMIGASI')}
+                className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                  categoryFilter === 'FUMIGASI'
+                    ? 'bg-amber-600 text-white font-bold'
+                    : 'bg-slate-950 text-amber-400 hover:text-amber-300 border border-amber-500/30'
+                }`}
+              >
+                Obat Fumigasi
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('SPRAYING_FOGGING')}
+                className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                  categoryFilter === 'SPRAYING_FOGGING'
+                    ? 'bg-emerald-600 text-white font-bold'
+                    : 'bg-slate-950 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30'
+                }`}
+              >
+                Obat Spraying &amp; Fogging
+              </button>
+              <button
+                type="button"
+                onClick={() => setCategoryFilter('BBM')}
+                className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                  categoryFilter === 'BBM'
+                    ? 'bg-yellow-600 text-slate-950 font-bold'
+                    : 'bg-slate-950 text-yellow-400 hover:text-yellow-300 border border-yellow-500/30'
+                }`}
+              >
+                BBM &amp; Pelumas
+              </button>
+              {!isOperator && (
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('PERLENGKAPAN')}
+                  className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                    categoryFilter === 'PERLENGKAPAN'
+                      ? 'bg-purple-600 text-white font-bold'
+                      : 'bg-slate-950 text-purple-400 hover:text-purple-300 border border-purple-500/30'
+                  }`}
+                >
+                  Perlengkapan
+                </button>
+              )}
             </div>
             <select
               value={selectedItemId}
@@ -299,8 +367,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
-          {/* Quantity, Date/Time & Reference */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Quantity & Date (Tanggal Transaksi tanpa jam, No Referensi dihilangkan dari form) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
                 Jumlah Mutasi ({currentItem?.unit || 'Unit'})
@@ -330,28 +398,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
-                Tanggal &amp; Waktu Transaksi
+                Tanggal Transaksi
               </label>
               <input
-                type="datetime-local"
+                type="date"
                 required
-                value={transactionDateTime}
-                onChange={(e) => setTransactionDateTime(e.target.value)}
+                value={transactionDate}
+                onChange={(e) => setTransactionDate(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono text-xs focus:outline-none focus:border-amber-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                No. Referensi / Surat Jalan
-              </label>
-              <input
-                type="text"
-                required
-                value={referenceNo}
-                onChange={(e) => setReferenceNo(e.target.value)}
-                placeholder="Contoh: SJ-OUT-2026/09/23-01"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 font-mono focus:outline-none focus:border-amber-500"
               />
             </div>
           </div>

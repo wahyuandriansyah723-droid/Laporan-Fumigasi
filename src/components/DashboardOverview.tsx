@@ -26,6 +26,12 @@ import {
   ShieldCheck,
   Layers,
   Boxes,
+  FlaskConical,
+  Flame,
+  Bug,
+  Plus,
+  Search,
+  Beaker,
 } from 'lucide-react';
 import {
   formatCurrencyIDR,
@@ -55,6 +61,7 @@ interface DashboardOverviewProps {
   onViewItemDetails: (item: InventoryItem) => void;
   onPrintSuratJalan: (trx: StockTransaction) => void;
   onUpdateTankCapacity?: (itemId: string, newCapacity: number, newMinThreshold?: number, locationName?: string) => void;
+  onEmptyTank?: (itemId: string, reason?: string) => void;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -69,11 +76,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onViewItemDetails,
   onPrintSuratJalan,
   onUpdateTankCapacity,
+  onEmptyTank,
 }) => {
   const [alertFilter, setAlertFilter] = useState<'ALL' | 'CRITICAL' | 'EXPIRING'>('ALL');
   const [alertCategoryFilter, setAlertCategoryFilter] = useState<Category | 'ALL'>('ALL');
   const [alertUrgencyFilter, setAlertUrgencyFilter] = useState<'ALL' | 'CRITICAL' | 'WARNING'>('ALL');
   const [isAlertCollapsed, setIsAlertCollapsed] = useState(false);
+
+  // Filter obat kimia khusus lapangan (Fumigasi & Spraying Fogging) untuk Operator & Admin
+  const [chemicalTabFilter, setChemicalTabFilter] = useState<'ALL' | 'FUMIGASI' | 'SPRAYING_FOGGING'>('ALL');
+  const [chemicalSearch, setChemicalSearch] = useState('');
 
   // Total valuation
   const totalValuation = items.reduce(
@@ -755,6 +767,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         onQuickAction={(item, action) => onOpenQuickTransaction(action, item)}
         onUpdateTankCapacity={onUpdateTankCapacity}
         canEditCapacity={!currentUser || currentUser.role === 'ADMIN' || currentUser.role === 'OPERATOR' || currentUser.permissions.canManageInventory}
+        onEmptyTank={onEmptyTank}
       />
 
       {/* Quick Action Dock */}
@@ -814,6 +827,260 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* ======================================================== */}
+      {/* 🧪 KETERSEDIAAN OBAT KIMIA LAPANGAN (FUMIGASI & FOGGING)  */}
+      {/* ======================================================== */}
+      {(() => {
+        const fumiCount = items.filter((i) => i.category === 'FUMIGASI').length;
+        const sprayCount = items.filter((i) => i.category === 'SPRAYING_FOGGING').length;
+        const filteredChemicals = items.filter((it) => {
+          if (it.category !== 'FUMIGASI' && it.category !== 'SPRAYING_FOGGING') return false;
+          if (chemicalTabFilter !== 'ALL' && it.category !== chemicalTabFilter) return false;
+          if (chemicalSearch) {
+            const q = chemicalSearch.toLowerCase();
+            return (
+              it.name.toLowerCase().includes(q) ||
+              it.sku.toLowerCase().includes(q) ||
+              (it.activeIngredients && it.activeIngredients.toLowerCase().includes(q)) ||
+              (it.targetPest && it.targetPest.toLowerCase().includes(q))
+            );
+          }
+          return true;
+        });
+
+        return (
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-xl space-y-4">
+            {/* Header section */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shrink-0">
+                  <FlaskConical className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    Ketersediaan Obat Kimia Lapangan (Fumigasi &amp; Spraying / Fogging)
+                    <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700">
+                      {filteredChemicals.length} Obat Aktif
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Pusat pemantauan stok obat kimia B3 karantina &amp; insektisida vektor untuk Operator Lapangan dan Admin.
+                  </p>
+                </div>
+              </div>
+
+              {/* Filter controls & Search */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setChemicalTabFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                      chemicalTabFilter === 'ALL'
+                        ? 'bg-indigo-600 text-white font-bold shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Semua ({fumiCount + sprayCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChemicalTabFilter('FUMIGASI')}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                      chemicalTabFilter === 'FUMIGASI'
+                        ? 'bg-amber-600 text-white font-bold shadow'
+                        : 'text-amber-400/80 hover:text-amber-300'
+                    }`}
+                  >
+                    <Flame className="w-3 h-3" />
+                    <span>Fumigasi ({fumiCount})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChemicalTabFilter('SPRAYING_FOGGING')}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-colors cursor-pointer ${
+                      chemicalTabFilter === 'SPRAYING_FOGGING'
+                        ? 'bg-emerald-600 text-white font-bold shadow'
+                        : 'text-emerald-400/80 hover:text-emerald-300'
+                    }`}
+                  >
+                    <Bug className="w-3 h-3" />
+                    <span>Spraying &amp; Fogging ({sprayCount})</span>
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    value={chemicalSearch}
+                    onChange={(e) => setChemicalSearch(e.target.value)}
+                    placeholder="Cari obat / bahan aktif..."
+                    className="pl-8 pr-3 py-1 bg-slate-950 border border-slate-800 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-44"
+                  />
+                  {chemicalSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setChemicalSearch('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs"
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Grid of chemical cards */}
+            {filteredChemicals.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 text-xs">
+                Tidak ada obat kimia yang cocok dengan filter pencarian.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-[460px] overflow-y-auto pr-1">
+                {filteredChemicals.map((item) => {
+                  const isBelow = isBelowMinimumThreshold(item);
+                  const isCritical = isCriticallyBelowThreshold(item);
+                  const minThresh = getMinThreshold(item);
+                  const latestBatch = item.batches && item.batches.length > 0 ? item.batches[0] : null;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all hover:border-slate-600 ${
+                        isCritical
+                          ? 'bg-rose-950/20 border-rose-500/40 shadow-sm'
+                          : isBelow
+                          ? 'bg-amber-950/20 border-amber-500/30 shadow-sm'
+                          : item.category === 'FUMIGASI'
+                          ? 'bg-slate-950/80 border-amber-500/20'
+                          : 'bg-slate-950/80 border-emerald-500/20'
+                      }`}
+                    >
+                      <div>
+                        {/* Badges line */}
+                        <div className="flex items-center justify-between gap-1 mb-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1 ${
+                              item.category === 'FUMIGASI'
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}
+                          >
+                            {item.category === 'FUMIGASI' ? (
+                              <Flame className="w-2.5 h-2.5" />
+                            ) : (
+                              <Bug className="w-2.5 h-2.5" />
+                            )}
+                            {item.category === 'FUMIGASI' ? 'FUMIGASI' : 'SPRAYING & FOGGING'}
+                          </span>
+                          <HazardBadge hazard={item.hazardClass} />
+                        </div>
+
+                        {/* Title and SKU */}
+                        <div className="space-y-0.5 mb-2">
+                          <div className="text-xs font-mono text-slate-400">{item.sku}</div>
+                          <div className="text-sm font-bold text-white leading-snug hover:text-amber-300 transition-colors cursor-pointer" onClick={() => onViewItemDetails(item)}>
+                            {item.name}
+                          </div>
+                        </div>
+
+                        {/* Active Ingredients & Target Pest */}
+                        {item.activeIngredients && (
+                          <div className="text-[11px] text-slate-300 bg-slate-900/80 px-2 py-1 rounded border border-slate-800/80 mb-2">
+                            <span className="text-slate-400 font-medium">Bahan Aktif: </span>
+                            <span className="text-amber-300/90 font-mono">{item.activeIngredients}</span>
+                          </div>
+                        )}
+
+                        {item.targetPest && (
+                          <div className="text-[11px] text-slate-400 mb-2 line-clamp-1" title={item.targetPest}>
+                            <span className="font-semibold text-slate-500">Target Hama: </span>
+                            {item.targetPest}
+                          </div>
+                        )}
+
+                        {/* Stock and Threshold info */}
+                        <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                          <div>
+                            <span className="text-[10px] text-slate-400 block font-mono">STOK SAAT INI</span>
+                            <div className="flex items-baseline gap-1.5">
+                              <span
+                                className={`text-xl font-mono font-black ${
+                                  isCritical
+                                    ? 'text-rose-400'
+                                    : isBelow
+                                    ? 'text-amber-400'
+                                    : 'text-emerald-400'
+                                }`}
+                              >
+                                {formatNumberID(item.currentStock)}
+                              </span>
+                              <span className="text-xs text-slate-400 font-sans">{item.unit}</span>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-500 block font-mono">MIN AMBANG</span>
+                            <span className="text-xs font-mono text-slate-400">
+                              {minThresh} {item.unit}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Latest Batch / Expiry indicator */}
+                        {latestBatch && (
+                          <div className="mt-2 text-[10px] font-mono text-slate-500 flex items-center justify-between bg-slate-900/50 px-2 py-0.5 rounded">
+                            <span>Batch: {latestBatch.batchNo}</span>
+                            {latestBatch.expiredDate && (
+                              <span className="text-amber-400/80">Exp: {latestBatch.expiredDate}</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action buttons (Operator can do OUT, Admin can do OUT & IN) */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onOpenQuickTransaction('OUT', item)}
+                          className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold transition-colors cursor-pointer"
+                          title="Catat pengeluaran obat ini untuk pekerjaan SPK atau proyek lapangan"
+                        >
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                          <span>- Pakai (SPK)</span>
+                        </button>
+
+                        {(!currentUser || currentUser.role === 'ADMIN' || currentUser.permissions.canCreateTransactions) && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenQuickTransaction('IN', item)}
+                            className="flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold transition-colors cursor-pointer"
+                            title="Catat penerimaan pasokan restock obat dari supplier"
+                          >
+                            <ArrowDownRight className="w-3.5 h-3.5" />
+                            <span>+ Masuk (Restock)</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => onViewItemDetails(item)}
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] transition-colors cursor-pointer"
+                          title="Lihat detail spesifikasi, batch & MSDS obat"
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Two Column Grid: Critical Alerts & Recent Transactions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
