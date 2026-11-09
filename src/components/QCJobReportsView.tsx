@@ -38,8 +38,10 @@ import {
   RefreshCw,
   Eye,
   FileSpreadsheet,
+  Timer,
+  Hourglass,
 } from 'lucide-react';
-import { formatNumberID, getDayNameIndo } from '../utils/formatters';
+import { formatNumberID, getDayNameIndo, getFumigationDurationInfo, formatDateIndo } from '../utils/formatters';
 import { JapfaFumigationDocument } from './JapfaFumigationDocument';
 
 interface QCJobReportsViewProps {
@@ -410,7 +412,9 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
       'Jenis Pekerjaan',
       'Nama Bahan Baku',
       'Tanggal Tutup',
-      'Tanggal Buka',
+      'Tanggal Buka / Aktif',
+      'Lama Difumigasi (Hari)',
+      'Status Lama Difumigasi',
       'Jumlah Dosis Obat',
       'Satuan',
       'Nama Obat',
@@ -429,13 +433,20 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
 
     const csvRows = [
       headers.join(','),
-      ...filteredJobs.map((j) =>
-        [
+      ...filteredJobs.map((j) => {
+        const dur = getFumigationDurationInfo(
+          j.closingDate || j.executionDate,
+          j.openingDate || j.aerationDate,
+          j.exposureHours
+        );
+        return [
           escapeCsv(j.jobNo),
           escapeCsv(j.jobType),
           escapeCsv(j.rawMaterialName || j.targetObject),
           escapeCsv(j.closingDate || j.executionDate),
           escapeCsv(j.openingDate || j.aerationDate || '-'),
+          escapeCsv(dur.totalDays),
+          escapeCsv(dur.progressText),
           escapeCsv(j.medicineQuantity),
           escapeCsv(j.medicineUnit),
           escapeCsv(j.medicineName),
@@ -444,8 +455,8 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
           escapeCsv(j.operatorName),
           escapeCsv(j.qcRecommendation),
           escapeCsv(j.qcApprovalStatus),
-        ].join(',')
-      ),
+        ].join(',');
+      }),
     ];
 
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -1005,7 +1016,8 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                   <th className="py-3 px-4">No. SPK &amp; Jenis</th>
                   <th className="py-3 px-4">🌾 Bahan Baku / Komoditas</th>
                   <th className="py-3 px-4">🔒 Tgl Tutup</th>
-                  <th className="py-3 px-4">🔓 Tgl Buka</th>
+                  <th className="py-3 px-4">🔓 Tgl Buka / Aktif</th>
+                  <th className="py-3 px-4">⏱️ Lama Difumigasi</th>
                   <th className="py-3 px-4">🧪 Dosis &amp; Obat</th>
                   <th className="py-3 px-4">📍 Lokasi / Klien</th>
                   <th className="py-3 px-4">🛡️ Status Rekomendasi QC</th>
@@ -1017,6 +1029,11 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                   const isFumigasi = job.jobType === 'FUMIGASI';
                   const isApproved = job.qcApprovalStatus === 'APPROVED';
                   const isRejected = job.qcApprovalStatus === 'REJECTED';
+                  const durationInfo = getFumigationDurationInfo(
+                    job.closingDate || job.executionDate,
+                    job.openingDate || job.aerationDate,
+                    job.exposureHours
+                  );
 
                   return (
                     <tr
@@ -1058,13 +1075,59 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                         <span className="text-[10px] text-slate-500 block">Tutup / Gas</span>
                       </td>
 
-                      {/* 4. Tanggal Buka */}
+                      {/* 4. Tanggal Buka / Aktif */}
                       <td className="py-3 px-4 font-mono">
                         <div className="flex items-center gap-1 text-amber-300 font-semibold">
                           <Unlock className="w-3 h-3 text-amber-400 shrink-0" />
                           <span>{job.openingDate || job.aerationDate || '-'}</span>
                         </div>
-                        <span className="text-[10px] text-slate-500 block">Buka / Aerasi</span>
+                        <span className="text-[10px] text-slate-500 block">Buka / Aktif</span>
+                      </td>
+
+                      {/* 5. Lama Difumigasi (dari Tanggal Tutup sampai Tanggal Aktif) */}
+                      <td className="py-3 px-4 font-mono">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Timer className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="font-bold text-amber-300 text-xs">
+                            {durationInfo.totalDays} Hari
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-sans">
+                            ({durationInfo.totalHours} Jam)
+                          </span>
+                          {durationInfo.isOngoing && (
+                            <span className="relative flex h-2 w-2" title="Fumigasi sedang aktif berjalan">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] mt-0.5">
+                          {durationInfo.status === 'IN_PROGRESS' && (
+                            <span className="text-amber-300 font-semibold bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/40">
+                              Hari ke-{durationInfo.elapsedDays} dari {durationInfo.totalDays}
+                            </span>
+                          )}
+                          {durationInfo.status === 'COMPLETED' && (
+                            <span className="text-emerald-400 font-medium">
+                              Selesai ({durationInfo.totalDays} Hari)
+                            </span>
+                          )}
+                          {durationInfo.status === 'SAME_DAY' && (
+                            <span className="text-sky-300 font-medium">
+                              1 Hari ({durationInfo.totalHours} Jam)
+                            </span>
+                          )}
+                          {durationInfo.status === 'UPCOMING' && (
+                            <span className="text-slate-400">
+                              Terjadwal ({durationInfo.totalDays} Hari)
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 truncate max-w-[170px]" title={`Tutup: ${job.closingDate || job.executionDate} ➔ Aktif: ${job.openingDate || job.aerationDate || '-'}`}>
+                          <span className="text-blue-400 font-mono">{job.closingDate || job.executionDate}</span>
+                          <span className="text-slate-500">➔</span>
+                          <span className="text-amber-400 font-mono">{job.openingDate || job.aerationDate || '-'}</span>
+                        </div>
                       </td>
 
                       {/* 5. Dosis & Nama Obat */}
@@ -1334,55 +1397,94 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                   </div>
                 </div>
 
-                {/* 4 PILAR DATA POKOK (KOMPAK & BERSIH) */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  {/* 1. Bahan Baku */}
-                  <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-                    <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1 uppercase">
-                      <Package className="w-3 h-3 text-amber-400" />
-                      <span>Bahan Baku</span>
-                    </div>
-                    <div className="font-bold text-white text-xs mt-1 truncate" title={job.rawMaterialName || job.targetObject}>
-                      {job.rawMaterialName || job.targetObject}
-                    </div>
-                  </div>
+                {/* PILAR DATA POKOK DENGAN LAMA DIFUMIGASI (KOMPAK & BERSIH) */}
+                {(() => {
+                  const cardDuration = getFumigationDurationInfo(
+                    job.closingDate || job.executionDate,
+                    job.openingDate || job.aerationDate,
+                    job.exposureHours
+                  );
 
-                  {/* 2. Tanggal Tutup */}
-                  <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-                    <div className="text-[10px] font-bold text-blue-400 flex items-center gap-1 uppercase">
-                      <Lock className="w-3 h-3" />
-                      <span>Tgl Tutup</span>
-                    </div>
-                    <div className="font-bold text-blue-200 font-mono text-xs mt-1">
-                      {job.closingDate || job.executionDate}
-                    </div>
-                  </div>
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+                      {/* 1. Bahan Baku */}
+                      <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                        <div className="text-[10px] font-bold text-slate-400 flex items-center gap-1 uppercase">
+                          <Package className="w-3 h-3 text-amber-400" />
+                          <span>Bahan Baku</span>
+                        </div>
+                        <div className="font-bold text-white text-xs mt-1 truncate" title={job.rawMaterialName || job.targetObject}>
+                          {job.rawMaterialName || job.targetObject}
+                        </div>
+                      </div>
 
-                  {/* 3. Tanggal Buka */}
-                  <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-                    <div className="text-[10px] font-bold text-amber-400 flex items-center gap-1 uppercase">
-                      <Unlock className="w-3 h-3" />
-                      <span>Tgl Buka</span>
-                    </div>
-                    <div className="font-bold text-amber-200 font-mono text-xs mt-1">
-                      {job.openingDate || job.aerationDate || '-'}
-                    </div>
-                  </div>
+                      {/* 2. Tanggal Tutup */}
+                      <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                        <div className="text-[10px] font-bold text-blue-400 flex items-center gap-1 uppercase">
+                          <Lock className="w-3 h-3" />
+                          <span>Tgl Tutup</span>
+                        </div>
+                        <div className="font-bold text-blue-200 font-mono text-xs mt-1">
+                          {job.closingDate || job.executionDate}
+                        </div>
+                      </div>
 
-                  {/* 4. Dosis Obat */}
-                  <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
-                    <div className="text-[10px] font-bold text-rose-400 flex items-center gap-1 uppercase">
-                      <Beaker className="w-3 h-3" />
-                      <span>Dosis Obat</span>
+                      {/* 3. Tanggal Buka / Aktif */}
+                      <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800">
+                        <div className="text-[10px] font-bold text-amber-400 flex items-center gap-1 uppercase">
+                          <Unlock className="w-3 h-3" />
+                          <span>Tgl Buka / Aktif</span>
+                        </div>
+                        <div className="font-bold text-amber-200 font-mono text-xs mt-1">
+                          {job.openingDate || job.aerationDate || '-'}
+                        </div>
+                      </div>
+
+                      {/* 4. Lama Difumigasi (dari Tanggal Tutup sampai Tanggal Aktif) */}
+                      <div className="p-2.5 rounded-xl bg-slate-950/70 border border-amber-500/30">
+                        <div className="text-[10px] font-bold text-amber-400 flex items-center gap-1 uppercase">
+                          <Timer className="w-3 h-3" />
+                          <span>Lama Difumigasi</span>
+                        </div>
+                        <div className="font-bold text-amber-300 font-mono text-xs mt-1 flex items-center gap-1.5 flex-wrap">
+                          <span>{cardDuration.totalDays} Hari</span>
+                          <span className="text-[11px] text-slate-400 font-sans font-normal">({cardDuration.totalHours} Jam)</span>
+                          {cardDuration.isOngoing && (
+                            <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-sans font-semibold animate-pulse">
+                              Aktif
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-300 truncate mt-0.5" title={cardDuration.detailText}>
+                          {cardDuration.status === 'IN_PROGRESS'
+                            ? `Hari ke-${cardDuration.elapsedDays} dari ${cardDuration.totalDays} Hari`
+                            : cardDuration.status === 'COMPLETED'
+                            ? `Selesai (${cardDuration.totalDays} Hari)`
+                            : `${cardDuration.totalDays} Hari (${cardDuration.totalHours} Jam)`}
+                        </div>
+                        <div className="text-[9px] text-slate-400 font-mono mt-0.5 flex items-center gap-1 truncate" title={`Tutup: ${job.closingDate || job.executionDate} s/d Aktif: ${job.openingDate || job.aerationDate || '-'}`}>
+                          <span className="text-blue-400">{job.closingDate || job.executionDate}</span>
+                          <span className="text-slate-600">➔</span>
+                          <span className="text-amber-400">{job.openingDate || job.aerationDate || '-'}</span>
+                        </div>
+                      </div>
+
+                      {/* 5. Dosis Obat */}
+                      <div className="p-2.5 rounded-xl bg-slate-950/70 border border-slate-800 col-span-2 sm:col-span-1">
+                        <div className="text-[10px] font-bold text-rose-400 flex items-center gap-1 uppercase">
+                          <Beaker className="w-3 h-3" />
+                          <span>Dosis Obat</span>
+                        </div>
+                        <div className="font-bold text-rose-300 font-mono text-xs mt-1 truncate">
+                          {formatNumberID(job.medicineQuantity)} {job.medicineUnit}{' '}
+                          <span className="text-[10px] font-sans text-slate-400 font-normal">
+                            ({job.medicineName})
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="font-bold text-rose-300 font-mono text-xs mt-1 truncate">
-                      {formatNumberID(job.medicineQuantity)} {job.medicineUnit}{' '}
-                      <span className="text-[10px] font-sans text-slate-400 font-normal">
-                        ({job.medicineName})
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {/* Meta line: Lokasi, Klien, Teknisi & Notes */}
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400 pt-1">
@@ -1452,32 +1554,61 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">🌾 Bahan Baku:</span>
-                    <strong className="text-white text-xs block truncate" title={selectedJobForReview.rawMaterialName || selectedJobForReview.targetObject}>
-                      {selectedJobForReview.rawMaterialName || selectedJobForReview.targetObject}
-                    </strong>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] uppercase font-bold text-blue-400 block">🔒 Tanggal Tutup:</span>
-                    <strong className="text-blue-200 font-mono text-xs block">
-                      {selectedJobForReview.closingDate || selectedJobForReview.executionDate}
-                    </strong>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] uppercase font-bold text-amber-400 block">🔓 Tanggal Buka:</span>
-                    <strong className="text-amber-200 font-mono text-xs block">
-                      {selectedJobForReview.openingDate || selectedJobForReview.aerationDate || '-'}
-                    </strong>
-                  </div>
-                  <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
-                    <span className="text-[10px] uppercase font-bold text-rose-400 block">🧪 Jumlah Obat:</span>
-                    <strong className="text-rose-300 font-mono text-xs block">
-                      {formatNumberID(selectedJobForReview.medicineQuantity)} {selectedJobForReview.medicineUnit}
-                    </strong>
-                  </div>
-                </div>
+                {(() => {
+                  const dur = getFumigationDurationInfo(
+                    selectedJobForReview.closingDate || selectedJobForReview.executionDate,
+                    selectedJobForReview.openingDate || selectedJobForReview.aerationDate,
+                    selectedJobForReview.exposureHours
+                  );
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">🌾 Bahan Baku:</span>
+                        <strong className="text-white text-xs block truncate" title={selectedJobForReview.rawMaterialName || selectedJobForReview.targetObject}>
+                          {selectedJobForReview.rawMaterialName || selectedJobForReview.targetObject}
+                        </strong>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] uppercase font-bold text-blue-400 block">🔒 Tanggal Tutup:</span>
+                        <strong className="text-blue-200 font-mono text-xs block">
+                          {selectedJobForReview.closingDate || selectedJobForReview.executionDate}
+                        </strong>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] uppercase font-bold text-amber-400 block">🔓 Tanggal Buka:</span>
+                        <strong className="text-amber-200 font-mono text-xs block">
+                          {selectedJobForReview.openingDate || selectedJobForReview.aerationDate || '-'}
+                        </strong>
+                      </div>
+                      <div className="p-2 rounded-lg bg-slate-900 border border-slate-800">
+                        <span className="text-[10px] uppercase font-bold text-rose-400 block">🧪 Jumlah Obat:</span>
+                        <strong className="text-rose-300 font-mono text-xs block truncate">
+                          {formatNumberID(selectedJobForReview.medicineQuantity)} {selectedJobForReview.medicineUnit}
+                        </strong>
+                      </div>
+                      <div className="p-2 rounded-lg bg-amber-950/40 border border-amber-500/50 col-span-2 sm:col-span-1">
+                        <span className="text-[10px] uppercase font-bold text-amber-400 flex items-center gap-1">
+                          <Timer className="w-3 h-3 text-amber-400" />
+                          <span>Lama Difumigasi:</span>
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <strong className="text-amber-200 font-bold text-xs block font-mono">
+                            {dur.durationDays > 0 ? `${dur.durationDays} Hari` : '-'}
+                          </strong>
+                          <span className="text-[10px] text-slate-400 font-mono">({dur.durationHours} Jam)</span>
+                        </div>
+                        <span className="text-[9px] font-semibold text-amber-300/90 block truncate" title={dur.progressText}>
+                          {dur.progressText}
+                        </span>
+                        <div className="text-[9px] text-slate-400 font-mono truncate" title={`Tutup: ${selectedJobForReview.closingDate || selectedJobForReview.executionDate} s/d Aktif: ${selectedJobForReview.openingDate || selectedJobForReview.aerationDate || '-'}`}>
+                          <span className="text-blue-300">{selectedJobForReview.closingDate || selectedJobForReview.executionDate}</span>
+                          <span className="text-slate-500"> ➔ </span>
+                          <span className="text-amber-300">{selectedJobForReview.openingDate || selectedJobForReview.aerationDate || '-'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-slate-300 pt-1 border-t border-slate-800/80">
                   <div>
@@ -1972,6 +2103,37 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                           Pembukaan terpal sungkup &amp; ventilasi gas aman
                         </div>
                       </div>
+
+                      {/* 5. LAMA WAKTU DIFUMIGASI */}
+                      {(() => {
+                        const dur = getFumigationDurationInfo(
+                          selectedJobForPrint.closingDate || selectedJobForPrint.executionDate,
+                          selectedJobForPrint.openingDate || selectedJobForPrint.aerationDate,
+                          selectedJobForPrint.exposureHours
+                        );
+                        return (
+                          <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/50 space-y-1 sm:col-span-2">
+                            <div className="text-[10px] font-bold text-amber-400 uppercase flex items-center gap-1.5">
+                              <Timer className="w-3.5 h-3.5 text-amber-400" />
+                              <span>5. Lama Waktu Difumigasi (Dari Tanggal Tutup sampai Tanggal Aktif / Buka):</span>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="text-base font-black text-amber-200 font-mono">
+                                {dur.durationDays > 0 ? `${dur.durationDays} Hari` : '-'}
+                              </div>
+                              <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                {dur.progressText}
+                              </span>
+                              <span className="text-xs text-slate-300 font-mono">
+                                (Total ~{dur.durationHours} Jam Paparan Terpal)
+                              </span>
+                            </div>
+                            <div className="text-slate-400 text-[11px]">
+                              Rentang Pelaksanaan: <span className="text-slate-200 font-mono">{dur.rangeText}</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -2393,6 +2555,34 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                       </p>
                     </div>
 
+                    {/* Real-time Lama Waktu Difumigasi */}
+                    {(() => {
+                      const dur = getFumigationDurationInfo(editClosingDate, editOpeningDate, editExposureHours);
+                      return (
+                        <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/50 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <Timer className="w-4 h-4 text-amber-400 shrink-0" />
+                            <div>
+                              <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1">
+                                Lama Waktu Difumigasi (Tutup s/d Aktif):
+                              </span>
+                              <div className="text-slate-300 text-xs">
+                                Periode: <span className="text-white font-medium">{dur.rangeText}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-bold font-mono border border-amber-500/30 text-xs">
+                              ⏱️ {dur.durationDays > 0 ? `${dur.durationDays} Hari` : '-'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-900 text-slate-200 border border-slate-700">
+                              {dur.progressText}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Parameter Gas & Sungkup */}
                     <div className="p-3 rounded-lg bg-slate-900 border border-slate-800 space-y-2.5 text-xs">
                       <div className="font-bold text-indigo-300 text-[11px] uppercase tracking-wider">
@@ -2512,7 +2702,7 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-slate-200 mb-1.5">
-                          Tanggal Pelaksanaan <span className="text-rose-400">*</span>
+                          Tanggal Pelaksanaan (Tutup) <span className="text-rose-400">*</span>
                         </label>
                         <input
                           type="date"
@@ -2523,7 +2713,7 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-200 mb-1.5">
-                          Tanggal Selesai Evaluasi
+                          Tanggal Selesai Evaluasi (Aktif / Buka)
                         </label>
                         <input
                           type="date"
@@ -2533,6 +2723,34 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                         />
                       </div>
                     </div>
+
+                    {/* Real-time Durasi Spraying / Fogging */}
+                    {(() => {
+                      const dur = getFumigationDurationInfo(editClosingDate, editOpeningDate, editExposureHours);
+                      return (
+                        <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/50 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-2">
+                            <Timer className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <div>
+                              <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1">
+                                Durasi Perlakuan / Masa Aktif Fogging:
+                              </span>
+                              <div className="text-slate-300 text-xs">
+                                Periode: <span className="text-white font-medium">{dur.rangeText}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold font-mono border border-emerald-500/30 text-xs">
+                              ⏱️ {dur.durationDays > 0 ? `${dur.durationDays} Hari` : '-'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-900 text-slate-200 border border-slate-700">
+                              {dur.progressText}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Dosis Insektisida */}
                     <div className="space-y-2 p-3 rounded-xl bg-slate-900/60 border border-slate-800">

@@ -103,3 +103,131 @@ export function getDayNameIndo(dateStr?: string): string {
     return '';
   }
 }
+
+export interface FumigationDurationInfo {
+  totalDays: number;
+  durationDays: number;
+  totalHours: number;
+  durationHours: number;
+  elapsedDays: number;
+  status: 'COMPLETED' | 'IN_PROGRESS' | 'UPCOMING' | 'SAME_DAY';
+  durationLabel: string;
+  detailText: string;
+  progressText: string;
+  rangeText: string;
+  isOngoing: boolean;
+}
+
+/**
+ * Menghitung sudah berapa lama pekerjaan difumigasi / spraying fogging
+ * dari Tanggal Tutup (closingDate) sampai Tanggal Buka / Tanggal Aktif (openingDate).
+ */
+export function getFumigationDurationInfo(
+  closingDateStr?: string,
+  openingDateStr?: string,
+  exposureHours?: number | string
+): FumigationDurationInfo {
+  const parsedExpHours = exposureHours !== undefined && exposureHours !== '' ? Number(exposureHours) : undefined;
+  const validExpHours = parsedExpHours !== undefined && !isNaN(parsedExpHours) ? parsedExpHours : undefined;
+
+  const fallbackDate = new Date().toISOString().slice(0, 10);
+  const startStr = (closingDateStr || fallbackDate).slice(0, 10);
+  const endStr = (openingDateStr || closingDateStr || fallbackDate).slice(0, 10);
+
+  const start = new Date(startStr);
+  const end = new Date(endStr);
+
+  const startValid = !isNaN(start.getTime());
+  const endValid = !isNaN(end.getTime());
+
+  if (!startValid || !endValid) {
+    const hours = validExpHours || 24;
+    return {
+      totalDays: 1,
+      durationDays: 1,
+      totalHours: hours,
+      durationHours: hours,
+      elapsedDays: 1,
+      status: 'SAME_DAY',
+      durationLabel: '1 Hari',
+      detailText: '1 Hari',
+      progressText: '1 Hari',
+      rangeText: '-',
+      isOngoing: false,
+    };
+  }
+
+  // Set ke UTC Midnight agar bebas dari timezone offset daylight
+  const startMs = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const endMs = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  const diffDays = Math.max(0, Math.round((endMs - startMs) / (1000 * 60 * 60 * 24)));
+
+  const totalDays = diffDays === 0 ? 1 : diffDays;
+  const totalHours = validExpHours && validExpHours > 0 ? validExpHours : totalDays * 24;
+
+  const now = new Date();
+  const todayMs = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const rangeText = `${formatDateIndo(startStr)} s/d ${formatDateIndo(endStr)}`;
+
+  if (diffDays === 0) {
+    const hoursLabel = validExpHours && validExpHours > 0 ? `${validExpHours} Jam` : '24 Jam';
+    return {
+      totalDays: 1,
+      durationDays: 1,
+      totalHours,
+      durationHours: totalHours,
+      elapsedDays: 1,
+      status: 'SAME_DAY',
+      durationLabel: `1 Hari (${hoursLabel})`,
+      detailText: `Perlakuan 1 Hari (${hoursLabel} paparan)`,
+      progressText: `Selesai 1 Hari (${hoursLabel})`,
+      rangeText: formatDateIndo(startStr),
+      isOngoing: false,
+    };
+  }
+
+  if (todayMs < startMs) {
+    return {
+      totalDays,
+      durationDays: totalDays,
+      totalHours,
+      durationHours: totalHours,
+      elapsedDays: 0,
+      status: 'UPCOMING',
+      durationLabel: `${totalDays} Hari`,
+      detailText: `${totalDays} Hari (${rangeText})`,
+      progressText: `Terjadwal ${totalDays} hari`,
+      rangeText,
+      isOngoing: false,
+    };
+  } else if (todayMs >= endMs) {
+    return {
+      totalDays,
+      durationDays: totalDays,
+      totalHours,
+      durationHours: totalHours,
+      elapsedDays: totalDays,
+      status: 'COMPLETED',
+      durationLabel: `${totalDays} Hari`,
+      detailText: `Selesai ${totalDays} Hari (${rangeText})`,
+      progressText: `Selesai ${totalDays} hari (Aktif dibuka sejak ${formatDateIndo(endStr)})`,
+      rangeText,
+      isOngoing: false,
+    };
+  } else {
+    const elapsed = Math.min(totalDays, Math.max(1, Math.round((todayMs - startMs) / (1000 * 60 * 60 * 24)) + 1));
+    return {
+      totalDays,
+      durationDays: totalDays,
+      totalHours,
+      durationHours: totalHours,
+      elapsedDays: elapsed,
+      status: 'IN_PROGRESS',
+      durationLabel: `Hari ke-${elapsed} dari ${totalDays} Hari`,
+      detailText: `Sedang difumigasi: Hari ke-${elapsed} dari ${totalDays} Hari (${rangeText})`,
+      progressText: `Sedang difumigasi: Hari ke-${elapsed} dari total ${totalDays} hari`,
+      rangeText,
+      isOngoing: true,
+    };
+  }
+}

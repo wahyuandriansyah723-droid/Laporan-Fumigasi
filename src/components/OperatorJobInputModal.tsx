@@ -18,8 +18,10 @@ import {
   Clock,
   ShieldAlert,
   Sparkles,
+  Timer,
+  Hourglass,
 } from 'lucide-react';
-import { formatNumberID, getDayNameIndo } from '../utils/formatters';
+import { formatNumberID, getDayNameIndo, getFumigationDurationInfo } from '../utils/formatters';
 
 interface OperatorJobInputModalProps {
   isOpen: boolean;
@@ -809,6 +811,35 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
                 </p>
               </div>
 
+              {/* Lama Waktu Difumigasi (dari tanggal tutup sampai tanggal aktif) */}
+              {(() => {
+                const dur = getFumigationDurationInfo(closingDate, openingDate, Number(exposureHours) || 120);
+                return (
+                  <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/50 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                        <Timer className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                          <span>Lama Waktu Difumigasi:</span>
+                          <span className="text-white font-mono font-bold text-xs">{dur.durationDays > 0 ? `${dur.durationDays} Hari` : '-'}</span>
+                          <span className="text-[10px] text-amber-300 font-normal">({dur.durationHours} Jam Paparan)</span>
+                        </div>
+                        <div className="text-slate-300 text-[11px]">
+                          Dari Tanggal Tutup (<span className="text-blue-300 font-mono">{closingDate}</span>) s/d Tanggal Aktif/Buka (<span className="text-amber-300 font-mono">{openingDate}</span>)
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        {dur.progressText}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* PARAMETER TEKNIS GAS KARANTINA & SUNGKUP */}
               <div className="p-3.5 rounded-xl bg-slate-900/90 border border-indigo-500/30 space-y-3">
                 <div className="text-[11px] font-bold text-indigo-300 uppercase tracking-wider flex items-center justify-between">
@@ -958,8 +989,8 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
                   1. Data Sasaran &amp; Area Pelaksanaan
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="sm:col-span-2 space-y-1">
+                <div className="space-y-3">
+                  <div className="space-y-1">
                     <label className="block text-emerald-300 font-bold mb-1">
                       Area / Sasaran Pengendalian Vektor <span className="text-rose-400">*</span>
                     </label>
@@ -997,21 +1028,65 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-slate-300 font-bold mb-1">
-                      Tanggal Pelaksanaan <span className="text-rose-400">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={closingDate}
-                      onChange={(e) => {
-                        setClosingDate(e.target.value);
-                        setExecutionDate(e.target.value);
-                      }}
-                      required
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
-                    />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">
+                        Tanggal Pelaksanaan (Mulai) <span className="text-rose-400">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={closingDate}
+                        onChange={(e) => {
+                          setClosingDate(e.target.value);
+                          setExecutionDate(e.target.value);
+                        }}
+                        required
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 font-bold mb-1">
+                        Tanggal Selesai Evaluasi (Aktif)
+                      </label>
+                      <input
+                        type="date"
+                        value={openingDate}
+                        onChange={(e) => {
+                          setOpeningDate(e.target.value);
+                          setAerationDate(e.target.value);
+                        }}
+                        className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white font-mono text-xs"
+                      />
+                    </div>
                   </div>
+
+                  {/* Durasi Pengerjaan / Masa Aktif Spraying & Fogging */}
+                  {(() => {
+                    const dur = getFumigationDurationInfo(closingDate, openingDate, Number(exposureHours) || 24);
+                    return (
+                      <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/50 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <Timer className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <div>
+                            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wide flex items-center gap-1">
+                              Durasi Perlakuan s/d Tanggal Aktif:
+                            </span>
+                            <div className="text-slate-300 text-xs">
+                              Rentang: <span className="text-white font-medium">{dur.rangeText}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold font-mono border border-emerald-500/30 text-xs">
+                            ⏱️ {dur.durationDays > 0 ? `${dur.durationDays} Hari` : '-'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-900 text-slate-200 border border-slate-700">
+                            {dur.progressText}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -1,6 +1,6 @@
 import React from 'react';
 import { FumigationJobReport } from '../types/jobs';
-import { formatDateIndo, getDayNameIndo } from '../utils/formatters';
+import { formatDateIndo, getDayNameIndo, getFumigationDurationInfo } from '../utils/formatters';
 
 interface JapfaFumigationDocumentProps {
   job: FumigationJobReport;
@@ -8,12 +8,19 @@ interface JapfaFumigationDocumentProps {
 }
 
 export const JapfaFumigationDocument: React.FC<JapfaFumigationDocumentProps> = ({ job, printable = false }) => {
-  // Determine days
+  // Determine days & dates
   const executionDay = job.executionDay || getDayNameIndo(job.closingDate || job.executionDate) || 'Senin';
   const executionDate = job.closingDate || job.executionDate || new Date().toISOString().slice(0, 10);
   
   const openingDay = job.openingDay || getDayNameIndo(job.openingDate || job.aerationDate) || 'Kamis';
   const openingDate = job.openingDate || job.aerationDate || '';
+
+  // Lama difumigasi dari tanggal tutup sampai tanggal aktif / buka
+  const durationInfo = getFumigationDurationInfo(
+    job.closingDate || job.executionDate,
+    job.openingDate || job.aerationDate,
+    job.exposureHours
+  );
 
   const requestDate = job.requestDate || executionDate;
   const rawMaterialName = job.rawMaterialName || job.targetObject || '-';
@@ -153,6 +160,9 @@ export const JapfaFumigationDocument: React.FC<JapfaFumigationDocumentProps> = (
             <span className="font-bold underline min-w-[80px]">{openingDay}</span>
             <span>tanggal :</span>
             <span className="font-bold underline min-w-[110px]">{openingDate ? formatDateIndo(openingDate) : '-'}</span>
+            <span className="font-bold text-black border border-black/40 bg-slate-100 px-2 py-0.5 rounded text-xs">
+              (Lama Difumigasi: {durationInfo.totalDays} Hari / {durationInfo.totalHours} Jam)
+            </span>
           </div>
           <p className="italic text-slate-800">
             Demikian berita acara ini kami buat untuk dapat dipergunakan sebagaimana mestinya
