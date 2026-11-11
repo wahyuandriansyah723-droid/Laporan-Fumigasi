@@ -28,6 +28,7 @@ interface OperatorJobInputModalProps {
   onClose: () => void;
   items: InventoryItem[];
   currentUser: AuthUser;
+  authUsers?: AuthUser[];
   operators?: MasterOperator[];
   destinations?: MasterProjectDestination[];
   settings?: SystemSettings;
@@ -46,6 +47,7 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
   onClose,
   items,
   currentUser,
+  authUsers = [],
   operators = [],
   destinations = [],
   settings,
@@ -53,6 +55,11 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
   initialRecommendation,
   onSaveJobAndDeductStock,
 }) => {
+  // Interkoneksi Akun ID: Ambil daftar user Admin, QC, dan Operator yang terdaftar di sistem
+  const registeredAdmins = authUsers.filter((u) => u.role === 'ADMIN');
+  const registeredQCs = authUsers.filter((u) => u.role === 'QC');
+  const registeredOperators = authUsers.filter((u) => u.role === 'OPERATOR');
+
   const [jobType, setJobType] = useState<JobType>(initialJobType || 'FUMIGASI');
   const [jobNo, setJobNo] = useState<string>('');
   const [title, setTitle] = useState<string>('');
@@ -121,6 +128,10 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
       const prefix = activeType === 'FUMIGASI' ? 'SPK-FUM' : 'SPK-FOG';
       setJobNo(`${prefix}-${dateCode}-${randomNum}`);
       setOperatorName(currentUser.name);
+      const defaultAdmin = registeredAdmins[0]?.name || 'Agus Pranoto';
+      const defaultQC = registeredQCs[0]?.name || 'Ratna Dewi, S.Si';
+      setWarehouseSupervisorName(defaultAdmin);
+      setQcSupervisorName(defaultQC);
       setErrorMessage('');
 
       if (initialRecommendation) {
@@ -884,45 +895,86 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
 
               {/* Tanda Tangan Form JAPFA */}
               <div className="pt-2 border-t border-slate-800 space-y-2 text-xs">
-                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  Personil Penandatangan Berita Acara:
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                    Personil Penandatangan Berita Acara:
+                  </div>
+                  <div className="text-[10px] text-cyan-400 font-mono flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    Terhubung ID Akun (Admin, Operator, QC)
+                  </div>
                 </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">
-                      Dibuat Oleh: <strong>Fimigation Opr</strong>
+                      Dibuat Oleh: <strong className="text-blue-400">Fumigation Opr</strong>
                     </label>
                     <input
                       type="text"
+                      list="operator-job-opr-list"
                       value={operatorName}
                       onChange={(e) => setOperatorName(e.target.value)}
                       required
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                      placeholder="Nama Operator..."
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-blue-500"
                     />
+                    <datalist id="operator-job-opr-list">
+                      {registeredOperators.map((u) => (
+                        <option key={u.id} value={u.name}>
+                          {u.username} ({u.nip || 'Operator'})
+                        </option>
+                      ))}
+                      {operators.map((op) => (
+                        <option key={op.id} value={op.name}>
+                          {op.name} ({op.role})
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
+
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">
-                      Dibuat Oleh: <strong>RM WH Supervisor</strong>
+                      Dibuat Oleh: <strong className="text-amber-400">RM WH Supervisor (Admin)</strong>
                     </label>
                     <input
                       type="text"
+                      list="operator-job-wh-list"
                       value={warehouseSupervisorName}
                       onChange={(e) => setWarehouseSupervisorName(e.target.value)}
                       required
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                      placeholder="Nama Supervisor WH..."
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-amber-500"
                     />
+                    <datalist id="operator-job-wh-list">
+                      {registeredAdmins.map((u) => (
+                        <option key={u.id} value={u.name}>
+                          {u.username} ({u.roleTitle || 'Admin Gudang'})
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
+
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">
-                      Mengetahui: <strong>QC Supervisor</strong>
+                      Mengetahui: <strong className="text-emerald-400">QC Supervisor</strong>
                     </label>
                     <input
                       type="text"
+                      list="operator-job-qc-list"
                       value={qcSupervisorName}
                       onChange={(e) => setQcSupervisorName(e.target.value)}
                       required
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                      placeholder="Nama QC Supervisor..."
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-emerald-500"
                     />
+                    <datalist id="operator-job-qc-list">
+                      {registeredQCs.map((u) => (
+                        <option key={u.id} value={u.name}>
+                          {u.username} ({u.nip || 'Quality Control'})
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
                 </div>
               </div>
@@ -1258,12 +1310,20 @@ export const OperatorJobInputModal: React.FC<OperatorJobInputModalProps> = ({
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-slate-400 font-medium mb-1">Teknisi / Operator Pelaksana</label>
+                    <label className="block text-slate-400 font-medium mb-1 flex items-center justify-between">
+                      <span>Teknisi / Operator Pelaksana</span>
+                      <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                        Terhubung ID Operator
+                      </span>
+                    </label>
                     <input
                       type="text"
+                      list="operator-job-opr-list"
                       value={operatorName}
                       onChange={(e) => setOperatorName(e.target.value)}
                       required
+                      placeholder="Pilih atau ketik Operator..."
                       className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
                     />
                   </div>

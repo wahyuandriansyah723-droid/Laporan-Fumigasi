@@ -40,6 +40,7 @@ import {
   FileSpreadsheet,
   Timer,
   Hourglass,
+  CalendarRange,
 } from 'lucide-react';
 import { formatNumberID, getDayNameIndo, getFumigationDurationInfo, formatDateIndo } from '../utils/formatters';
 import { JapfaFumigationDocument } from './JapfaFumigationDocument';
@@ -47,10 +48,12 @@ import { JapfaFumigationDocument } from './JapfaFumigationDocument';
 interface QCJobReportsViewProps {
   jobReports: FumigationJobReport[];
   currentUser: AuthUser;
+  authUsers?: AuthUser[];
   onUpdateJobReport: (updatedReport: FumigationJobReport) => void;
   onDeleteJobReport?: (id: string) => void;
   onDeleteAllJobReports?: (jobType?: 'FUMIGASI' | 'SPRAYING_FOGGING') => void;
   onOpenNewJobModal?: (preselectedType?: 'FUMIGASI' | 'SPRAYING_FOGGING') => void;
+  onNavigateToTab?: (tab: any) => void;
   onShowToast: (message: string) => void;
   forcedJobType?: 'FUMIGASI' | 'SPRAYING_FOGGING';
 }
@@ -58,13 +61,19 @@ interface QCJobReportsViewProps {
 export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
   jobReports,
   currentUser,
+  authUsers = [],
   onUpdateJobReport,
   onDeleteJobReport,
   onDeleteAllJobReports,
   onOpenNewJobModal,
+  onNavigateToTab,
   onShowToast,
   forcedJobType,
 }) => {
+  // Interkoneksi Akun ID: Ambil daftar user Admin, QC, dan Operator yang terdaftar di sistem
+  const registeredAdmins = (authUsers || []).filter((u) => u.role === 'ADMIN');
+  const registeredQCs = (authUsers || []).filter((u) => u.role === 'QC');
+  const registeredOperators = (authUsers || []).filter((u) => u.role === 'OPERATOR');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterRecommendation, setFilterRecommendation] = useState<string>('ALL');
   const [filterType, setFilterType] = useState<string>(forcedJobType || 'ALL');
@@ -296,14 +305,21 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [jobReports]);
 
-  // Unique options for Petugas Lapangan / Operator
+  // Unique options for Petugas Lapangan / Operator (Terhubung dengan akun Operator sistem)
   const operatorOptions = useMemo(() => {
     const set = new Set<string>();
+    // Tambahkan seluruh akun Operator yang terdaftar di sistem
+    (authUsers || []).forEach((u) => {
+      if (u.role === 'OPERATOR' && u.name && u.name.trim()) {
+        set.add(u.name.trim());
+      }
+    });
+    // Tambahkan nama petugas yang tercatat di riwayat laporan
     jobReports.forEach((j) => {
       if (j.operatorName && j.operatorName.trim()) set.add(j.operatorName.trim());
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [jobReports]);
+  }, [jobReports, authUsers]);
 
   // Enhanced Filtered Jobs Logic
   const filteredJobs = useMemo(() => {
@@ -591,6 +607,19 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
               <Download className="w-3.5 h-3.5 text-emerald-400" />
               <span className="hidden sm:inline">Ekspor CSV</span>
             </button>
+
+            {/* Analisa Kutu Triwulan (Khusus Admin) */}
+            {onNavigateToTab && currentUser.role === 'ADMIN' && (
+              <button
+                type="button"
+                onClick={() => onNavigateToTab('pest_quarterly_analysis')}
+                className="px-3 py-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="Buka Analisa Intensitas Kutu Triwulan & SOP Penanganan Bulanan (Khusus Admin)"
+              >
+                <CalendarRange className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Analisa Kutu</span>
+              </button>
+            )}
 
             {/* Hapus Semua Laporan */}
             {onDeleteAllJobReports && canDeleteJob && jobReports.length > 0 && (
@@ -2624,42 +2653,81 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
 
                     {/* Personil & Tanda Tangan */}
                     <div className="pt-2 border-t border-slate-800 space-y-2 text-xs">
-                      <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                        Personil Penandatangan:
+                      <div className="flex items-center justify-between">
+                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          Personil Penandatangan Berita Acara:
+                        </div>
+                        <div className="text-[10px] text-cyan-400 font-mono flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                          Terhubung ID Akun (Admin, Operator, QC)
+                        </div>
                       </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <label className="block text-[11px] text-slate-400 mb-1">
-                            Dibuat Oleh: <strong>Fimigation Opr</strong>
+                            Dibuat Oleh: <strong className="text-blue-400">Fumigation Opr</strong>
                           </label>
                           <input
                             type="text"
+                            list="qc-edit-job-opr-list"
                             value={editOperatorName}
                             onChange={(e) => setEditOperatorName(e.target.value)}
-                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                            placeholder="Nama Operator..."
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-blue-500"
                           />
+                          <datalist id="qc-edit-job-opr-list">
+                            {registeredOperators.map((u) => (
+                              <option key={u.id} value={u.name}>
+                                {u.username} ({u.nip || 'Operator'})
+                              </option>
+                            ))}
+                            {operatorOptions.map((op) => (
+                              <option key={op} value={op} />
+                            ))}
+                          </datalist>
                         </div>
+
                         <div>
                           <label className="block text-[11px] text-slate-400 mb-1">
-                            Dibuat Oleh: <strong>RM WH Supervisor</strong>
+                            Dibuat Oleh: <strong className="text-amber-400">RM WH Supervisor (Admin)</strong>
                           </label>
                           <input
                             type="text"
+                            list="qc-edit-job-wh-list"
                             value={editWarehouseSupervisorName}
                             onChange={(e) => setEditWarehouseSupervisorName(e.target.value)}
-                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                            placeholder="Nama Supervisor WH..."
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-amber-500"
                           />
+                          <datalist id="qc-edit-job-wh-list">
+                            {registeredAdmins.map((u) => (
+                              <option key={u.id} value={u.name}>
+                                {u.username} ({u.roleTitle || 'Admin Gudang'})
+                              </option>
+                            ))}
+                          </datalist>
                         </div>
+
                         <div>
                           <label className="block text-[11px] text-slate-400 mb-1">
-                            Mengetahui: <strong>QC Supervisor</strong>
+                            Mengetahui: <strong className="text-emerald-400">QC Supervisor</strong>
                           </label>
                           <input
                             type="text"
+                            list="qc-edit-job-qc-list"
                             value={editQcSupervisorName}
                             onChange={(e) => setEditQcSupervisorName(e.target.value)}
-                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                            placeholder="Nama QC Supervisor..."
+                            className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs focus:ring-1 focus:ring-emerald-500"
                           />
+                          <datalist id="qc-edit-job-qc-list">
+                            {registeredQCs.map((u) => (
+                              <option key={u.id} value={u.name}>
+                                {u.username} ({u.nip || 'Quality Control'})
+                              </option>
+                            ))}
+                          </datalist>
                         </div>
                       </div>
                     </div>
@@ -2864,9 +2932,16 @@ export const QCJobReportsView: React.FC<QCJobReportsViewProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] text-slate-400 mb-1">Teknisi / Operator Fogger:</label>
+                        <label className="block text-[11px] text-slate-400 mb-1 flex items-center justify-between">
+                          <span>Teknisi / Operator Fogger:</span>
+                          <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                            Terhubung ID Operator
+                          </span>
+                        </label>
                         <input
                           type="text"
+                          list="qc-edit-job-opr-list"
                           value={editOperatorName}
                           onChange={(e) => setEditOperatorName(e.target.value)}
                           placeholder="Nama Operator..."

@@ -25,10 +25,12 @@ import {
 import { AuthUser } from '../types/auth';
 import { FumigationJobReport } from '../types/jobs';
 import { RawMaterialRecommendation } from '../types/recommendations';
+import { QuarterlyPestPlan } from '../types/pestAnalysis';
 import { INITIAL_ITEMS, INITIAL_TRANSACTIONS } from '../data/initialData';
 import { INITIAL_AUTH_USERS, getDefaultPermissionsForRole } from '../data/initialAuthUsers';
 import { INITIAL_JOB_REPORTS } from '../data/initialJobReports';
 import { INITIAL_RAW_RECOMMENDATIONS } from '../data/initialRecommendations';
+import { INITIAL_QUARTERLY_PLANS } from '../data/initialPestAnalysisData';
 import {
   INITIAL_SUPPLIERS,
   INITIAL_LOCATIONS,
@@ -46,6 +48,7 @@ export const COLLECTIONS = {
   TRANSACTIONS: 'stock_transactions',
   JOB_REPORTS: 'job_reports',
   RECOMMENDATIONS: 'raw_recommendations',
+  PEST_PLANS: 'quarterly_pest_plans',
   USERS: 'auth_users',
   SUPPLIERS: 'master_suppliers',
   LOCATIONS: 'master_locations',
@@ -297,6 +300,45 @@ export const deleteRawRecommendation = async (recId: string): Promise<void> => {
   }
 };
 
+// 4b. QUARTERLY PEST PLANS & MONTHLY TREATMENTS (Real-time listener)
+export const subscribeQuarterlyPestPlans = (
+  callback: (plans: QuarterlyPestPlan[]) => void
+): (() => void) => {
+  const colRef = collection(db, COLLECTIONS.PEST_PLANS);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const list: QuarterlyPestPlan[] = [];
+      snapshot.forEach((d) => {
+        list.push(d.data() as QuarterlyPestPlan);
+      });
+      list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      callback(list);
+    },
+    (err) => {
+      handleFirestoreError(err, OperationType.LIST, COLLECTIONS.PEST_PLANS);
+    }
+  );
+};
+
+export const saveQuarterlyPestPlan = async (plan: QuarterlyPestPlan): Promise<void> => {
+  try {
+    const docRef = doc(db, COLLECTIONS.PEST_PLANS, plan.id);
+    await setDoc(docRef, sanitizeForFirestore(plan), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, `${COLLECTIONS.PEST_PLANS}/${plan.id}`);
+  }
+};
+
+export const deleteQuarterlyPestPlan = async (planId: string): Promise<void> => {
+  try {
+    const docRef = doc(db, COLLECTIONS.PEST_PLANS, planId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, `${COLLECTIONS.PEST_PLANS}/${planId}`);
+  }
+};
+
 // 5. AUTH USERS (Real-time listener)
 export const subscribeAuthUsers = (
   callback: (users: AuthUser[]) => void
@@ -468,6 +510,13 @@ export const seedDatabaseIfEmpty = async (): Promise<void> => {
       recBatch.set(doc(db, COLLECTIONS.RECOMMENDATIONS, r.id), sanitizeForFirestore(r));
     });
     await recBatch.commit();
+
+    // 5b. Initial quarterly pest plans
+    const pestBatch = writeBatch(db);
+    INITIAL_QUARTERLY_PLANS.forEach((p) => {
+      pestBatch.set(doc(db, COLLECTIONS.PEST_PLANS, p.id), sanitizeForFirestore(p));
+    });
+    await pestBatch.commit();
 
     // 6. Initial system settings
     await setDoc(doc(db, COLLECTIONS.SETTINGS, 'default_setting'), sanitizeForFirestore(INITIAL_SYSTEM_SETTINGS));

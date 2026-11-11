@@ -114,5 +114,12 @@ service cloud.firestore {
       allow list: if true;
       allow write: if isValidId(settingId);
     }
+
+    // Quarterly Pest Infestation Plans and Monthly Treatments
+    match /quarterly_pest_plans/{planId} {
+      allow get: if isValidId(planId);
+      allow list: if true;
+      allow write: if isValidId(planId);
+    }
   }
 }

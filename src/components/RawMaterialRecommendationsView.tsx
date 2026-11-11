@@ -23,6 +23,7 @@ import {
   ExternalLink,
   Info,
   Scale,
+  CalendarRange,
 } from 'lucide-react';
 import { formatNumberID } from '../utils/formatters';
 
@@ -36,6 +37,7 @@ interface RawMaterialRecommendationsViewProps {
   onExecuteAsSPK?: (rec: RawMaterialRecommendation) => void; // Operator / Admin can execute into SPK
   onOpenExecutionModal?: (rec: RawMaterialRecommendation) => void; // Perintah sudah dilakukan Fumigasi/Spraying/Fogging
   onUpdateStatus?: (id: string, status: RecommendationStatus, adminNotes?: string) => void;
+  onNavigateToTab?: (tab: any) => void;
   onShowToast: (message: string) => void;
 }
 
@@ -49,6 +51,7 @@ export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendations
   onExecuteAsSPK,
   onOpenExecutionModal,
   onUpdateStatus,
+  onNavigateToTab,
   onShowToast,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -192,29 +195,43 @@ export const RawMaterialRecommendationsView: React.FC<RawMaterialRecommendations
           </p>
         </div>
 
-        {/* Action Button */}
-        {(isQC || isAdmin) && (
-          <button
-            type="button"
-            onClick={() => onOpenNewModal(forcedTreatmentType)}
-            className={`px-4 py-2.5 rounded-xl text-white font-bold text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer shrink-0 ${
-              forcedTreatmentType === 'FUMIGASI'
-                ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
-                : forcedTreatmentType === 'SPRAYING_FOGGING'
-                ? 'bg-sky-600 hover:bg-sky-500 shadow-sky-600/20'
-                : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
-            }`}
-          >
-            <Plus className="w-4 h-4" />
-            <span>
-              {forcedTreatmentType === 'FUMIGASI'
-                ? '+ Buat Rekomendasi Fumigasi'
-                : forcedTreatmentType === 'SPRAYING_FOGGING'
-                ? '+ Buat Rekomendasi Spraying & Fogging'
-                : '+ Buat Rekomendasi Bahan Baku'}
-            </span>
-          </button>
-        )}
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {onNavigateToTab && isAdmin && (
+            <button
+              type="button"
+              onClick={() => onNavigateToTab('pest_quarterly_analysis')}
+              className="px-3.5 py-2.5 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 border border-indigo-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow"
+              title="Buka Analisa Intensitas Kutu Triwulan & SOP Penanganan Bulanan (Khusus Admin)"
+            >
+              <CalendarRange className="w-4 h-4 text-indigo-400" />
+              <span>Analisa Kutu Triwulan</span>
+            </button>
+          )}
+
+          {(isQC || isAdmin) && (
+            <button
+              type="button"
+              onClick={() => onOpenNewModal(forcedTreatmentType)}
+              className={`px-4 py-2.5 rounded-xl text-white font-bold text-xs flex items-center gap-2 shadow-lg transition-all cursor-pointer shrink-0 ${
+                forcedTreatmentType === 'FUMIGASI'
+                  ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                  : forcedTreatmentType === 'SPRAYING_FOGGING'
+                  ? 'bg-sky-600 hover:bg-sky-500 shadow-sky-600/20'
+                  : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              <span>
+                {forcedTreatmentType === 'FUMIGASI'
+                  ? '+ Buat Rekomendasi Fumigasi'
+                  : forcedTreatmentType === 'SPRAYING_FOGGING'
+                  ? '+ Buat Rekomendasi Spraying & Fogging'
+                  : '+ Buat Rekomendasi Bahan Baku'}
+              </span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* KPI Cards Strip */}

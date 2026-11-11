@@ -429,6 +429,27 @@ export const AdminUsersManagementView: React.FC<AdminUsersManagementViewProps> =
         </div>
       </div>
 
+      {/* Interkoneksi Real-time Status Card */}
+      <div className="p-3.5 rounded-xl bg-gradient-to-r from-cyan-950/40 via-blue-950/30 to-indigo-950/40 border border-cyan-500/30 flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2.5">
+          <div className="p-2 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shrink-0">
+            <UserCheck className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="text-cyan-200 font-semibold flex items-center gap-2">
+              <span>Semua ID Saling Terkoneksi (Admin &bull; Operator &bull; QC)</span>
+              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                Live Sync
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Setiap penambahan, pengeditan kata sandi/nama, dan perubahan wewenang ID langsung terhubung ke sesi login pengguna, form input SPK pekerjaan lapangan, dan filter review QC secara instan di semua perangkat.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Filter and Search Bar */}
       <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Search */}

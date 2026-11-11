@@ -32,6 +32,12 @@ import {
   Plus,
   Search,
   Beaker,
+  Edit2,
+  Trash2,
+  Save,
+  Sliders,
+  Check,
+  X,
 } from 'lucide-react';
 import {
   formatCurrencyIDR,
@@ -62,6 +68,9 @@ interface DashboardOverviewProps {
   onPrintSuratJalan: (trx: StockTransaction) => void;
   onUpdateTankCapacity?: (itemId: string, newCapacity: number, newMinThreshold?: number, locationName?: string) => void;
   onEmptyTank?: (itemId: string, reason?: string) => void;
+  onSaveItem?: (item: InventoryItem) => void;
+  onDeleteItem?: (itemId: string) => void;
+  onEditItem?: (item: InventoryItem) => void;
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
@@ -77,11 +86,26 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
   onPrintSuratJalan,
   onUpdateTankCapacity,
   onEmptyTank,
+  onSaveItem,
+  onDeleteItem,
+  onEditItem,
 }) => {
   const [alertFilter, setAlertFilter] = useState<'ALL' | 'CRITICAL' | 'EXPIRING'>('ALL');
   const [alertCategoryFilter, setAlertCategoryFilter] = useState<Category | 'ALL'>('ALL');
   const [alertUrgencyFilter, setAlertUrgencyFilter] = useState<'ALL' | 'CRITICAL' | 'WARNING'>('ALL');
   const [isAlertCollapsed, setIsAlertCollapsed] = useState(false);
+
+  // Edit & Save State in Alert Peringatan Ambang Batas
+  const [editingAlertItem, setEditingAlertItem] = useState<InventoryItem | null>(null);
+  const [editAlertName, setEditAlertName] = useState<string>('');
+  const [editAlertStock, setEditAlertStock] = useState<string>('');
+  const [editAlertThreshold, setEditAlertThreshold] = useState<string>('');
+  const [editAlertPrice, setEditAlertPrice] = useState<string>('');
+  const [editAlertLocation, setEditAlertLocation] = useState<string>('');
+  const [editAlertCapacity, setEditAlertCapacity] = useState<string>('');
+
+  // Delete Item State in Alert Peringatan Ambang Batas
+  const [alertItemToDelete, setAlertItemToDelete] = useState<InventoryItem | null>(null);
 
   // Filter obat kimia khusus lapangan (Fumigasi & Spraying Fogging) untuk Operator & Admin
   const [chemicalTabFilter, setChemicalTabFilter] = useState<'ALL' | 'FUMIGASI' | 'SPRAYING_FOGGING'>('ALL');
@@ -126,6 +150,59 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     if (alertUrgencyFilter === 'WARNING' && isCriticallyBelowThreshold(item)) return false;
     return true;
   });
+
+  // Open edit modal from warning alert
+  const handleOpenEditAlertItem = (item: InventoryItem) => {
+    setEditingAlertItem(item);
+    setEditAlertName(item.name);
+    setEditAlertStock(String(item.currentStock));
+    setEditAlertThreshold(String(getMinThreshold(item)));
+    setEditAlertPrice(String(item.pricePerUnit));
+    setEditAlertLocation(item.location || '');
+    const cap = item.tankCapacity || (item.category === 'BBM' ? (item.currentStock > 1000 ? 5000 : 1000) : 0);
+    setEditAlertCapacity(String(cap));
+  };
+
+  // Save changes from alert edit modal
+  const handleSaveEditAlertItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAlertItem) return;
+
+    const parsedStock = parseFloat(editAlertStock);
+    const parsedThresh = parseFloat(editAlertThreshold);
+    const parsedPrice = parseFloat(editAlertPrice);
+    const isBBM = editingAlertItem.category === 'BBM' || editingAlertItem.isFuel;
+    const parsedCap = isBBM && editAlertCapacity ? parseFloat(editAlertCapacity) : editingAlertItem.tankCapacity;
+
+    const updated: InventoryItem = {
+      ...editingAlertItem,
+      name: editAlertName.trim() || editingAlertItem.name,
+      currentStock: !isNaN(parsedStock) ? Math.max(0, parsedStock) : editingAlertItem.currentStock,
+      minimumStockThreshold: !isNaN(parsedThresh) ? Math.max(0, parsedThresh) : editingAlertItem.minimumStockThreshold,
+      minStockAlert: !isNaN(parsedThresh) ? Math.max(0, parsedThresh) : editingAlertItem.minStockAlert,
+      pricePerUnit: !isNaN(parsedPrice) ? Math.max(0, parsedPrice) : editingAlertItem.pricePerUnit,
+      location: editAlertLocation.trim() || editingAlertItem.location,
+      tankCapacity: !isNaN(parsedCap as number) && (parsedCap as number) > 0 ? (parsedCap as number) : editingAlertItem.tankCapacity,
+      lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
+    };
+
+    if (onSaveItem) {
+      onSaveItem(updated);
+    }
+
+    if (isBBM && onUpdateTankCapacity && parsedCap) {
+      onUpdateTankCapacity(updated.id, parsedCap as number, updated.minimumStockThreshold, updated.location);
+    }
+
+    setEditingAlertItem(null);
+  };
+
+  // Confirm delete from warning alert
+  const handleConfirmDeleteAlertItem = () => {
+    if (!alertItemToDelete || !onDeleteItem) return;
+    onDeleteItem(alertItemToDelete.id);
+    setAlertItemToDelete(null);
+  };
 
   // Export restock sheet to CSV
   const handleExportRestockCSV = () => {
@@ -440,6 +517,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                   const status = getStockThresholdStatus(item);
                   const isCritical = status.level === 'CRITICAL';
                   const estimatedCost = suggested * item.pricePerUnit;
+                  const isBBM = item.category === 'BBM' || item.isFuel;
+                  const tankCap = item.tankCapacity || (item.currentStock > 1000 ? 5000 : 1000);
+                  const tankPercent = Math.min(100, Math.round((item.currentStock / tankCap) * 100));
+                  const tankSpaceLeft = Math.max(0, tankCap - item.currentStock);
 
                   return (
                     <div
@@ -458,6 +539,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                               {item.sku}
                             </span>
                             <HazardBadge hazard={item.hazardClass} />
+                            {isBBM && (
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1">
+                                <Fuel className="w-3 h-3 text-cyan-400" />
+                                <span>TANGKI BBM</span>
+                              </span>
+                            )}
                           </div>
 
                           {/* Visual Pulsing Badge */}
@@ -488,6 +575,45 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         <p className="text-[11px] text-slate-400 truncate mt-0.5">
                           {item.location} · {item.subCategory}
                         </p>
+
+                        {/* If Tangki BBM: Real-time tank monitor & sensor indicator */}
+                        {isBBM && (
+                          <div className="my-2.5 p-2.5 rounded-lg bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-cyan-500/30 space-y-2">
+                            <div className="flex items-center justify-between text-[11px] font-mono">
+                              <span className="text-cyan-300 font-bold flex items-center gap-1">
+                                <Fuel className="w-3.5 h-3.5 text-cyan-400" />
+                                <span>MONITORING TANGKI BBM</span>
+                              </span>
+                              <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                LIVE SENSOR
+                              </span>
+                            </div>
+
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-[11px] font-mono">
+                                <span className="text-slate-400">Level Tangki Terisi:</span>
+                                <span className="font-bold text-amber-400">
+                                  {tankPercent}% <span className="text-slate-400 font-normal">({formatNumberID(item.currentStock)} / {formatNumberID(tankCap)} L)</span>
+                                </span>
+                              </div>
+                              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full transition-all rounded-full ${
+                                    tankPercent < 15
+                                      ? 'bg-gradient-to-r from-rose-600 to-rose-400'
+                                      : 'bg-gradient-to-r from-amber-600 to-yellow-400'
+                                  }`}
+                                  style={{ width: `${Math.max(5, tankPercent)}%` }}
+                                />
+                              </div>
+                              <div className="flex justify-between text-[10px] font-mono pt-1 text-slate-400">
+                                <span>Kapasitas: <strong className="text-slate-200">{formatNumberID(tankCap)} L</strong></span>
+                                <span>Sisa Ruang: <strong className="text-emerald-400">+{formatNumberID(tankSpaceLeft)} L</strong></span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Gauge & Numbers */}
                         <div className="my-2.5 p-2.5 bg-slate-900/90 rounded-lg border border-slate-800 space-y-2">
@@ -548,12 +674,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                         </div>
                       </div>
 
-                      {/* 1-Click Proactive Restock CTA */}
-                      <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80">
+                      {/* Action buttons: Restock, Edit & Simpan, Hapus, Info */}
+                      <div className="flex items-center gap-1.5 pt-2 border-t border-slate-800/80 flex-wrap">
                         <button
                           type="button"
                           onClick={() => onOpenQuickTransaction('IN', item, suggested)}
-                          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer shadow ${
+                          className={`flex-1 min-w-[110px] flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer shadow ${
                             isCritical
                               ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/30'
                               : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-amber-900/30'
@@ -563,6 +689,27 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                           <ShoppingCart className="w-3.5 h-3.5" />
                           <span>Restock (+{formatNumberID(suggested)} {item.unit})</span>
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditAlertItem(item)}
+                          className="px-2 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                          title={`Edit dan simpan stok & ambang batas ${item.name}`}
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Edit</span>
+                        </button>
+
+                        {onDeleteItem && (
+                          <button
+                            type="button"
+                            onClick={() => setAlertItemToDelete(item)}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-700 text-xs transition-colors cursor-pointer"
+                            title={`Hapus ${item.name} dari inventaris gudang`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
                         <button
                           type="button"
@@ -768,6 +915,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
         onUpdateTankCapacity={onUpdateTankCapacity}
         canEditCapacity={!currentUser || currentUser.role === 'ADMIN' || currentUser.role === 'OPERATOR' || currentUser.permissions.canManageInventory}
         onEmptyTank={onEmptyTank}
+        onSaveItem={onSaveItem}
+        onDeleteItem={onDeleteItem}
       />
 
       {/* Quick Action Dock */}
@@ -1307,6 +1456,232 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ================= MODAL: EDIT & SIMPAN AMBANG BATAS / STOK ================= */}
+      {editingAlertItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-amber-500/50 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden text-slate-100 space-y-0">
+            {/* Modal Header */}
+            <div className="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    Edit &amp; Simpan Peringatan Ambang Batas
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {editingAlertItem.sku} &bull; {editingAlertItem.category}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAlertItem(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveEditAlertItem} className="p-5 space-y-4">
+              {/* Nama Barang */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-200 mb-1">
+                  Nama Barang <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editAlertName}
+                  onChange={(e) => setEditAlertName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Stok Fisik Saat Ini */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-200 mb-1">
+                    Stok Fisik Saat Ini <span className="text-rose-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="any"
+                      value={editAlertStock}
+                      onChange={(e) => setEditAlertStock(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white font-mono font-bold text-xs focus:outline-none focus:border-amber-500 pr-14"
+                    />
+                    <span className="absolute right-3 top-2 text-[11px] font-mono text-slate-400">
+                      {editingAlertItem.unit}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Ambang Batas Minimum */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-200 mb-1">
+                    Ambang Batas Min <span className="text-rose-400">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="any"
+                      value={editAlertThreshold}
+                      onChange={(e) => setEditAlertThreshold(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-amber-300 font-mono font-bold text-xs focus:outline-none focus:border-amber-500 pr-14"
+                    />
+                    <span className="absolute right-3 top-2 text-[11px] font-mono text-slate-400">
+                      {editingAlertItem.unit}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Khusus Tangki BBM: Kapasitas Tangki */}
+              {(editingAlertItem.category === 'BBM' || editingAlertItem.isFuel) && (
+                <div className="p-3 rounded-xl bg-slate-950/80 border border-cyan-500/30 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-cyan-300 font-bold flex items-center gap-1.5">
+                      <Fuel className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Kapasitas Tangki Sensor BBM (Liter)</span>
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={editAlertCapacity}
+                      onChange={(e) => setEditAlertCapacity(e.target.value)}
+                      placeholder="Contoh: 5000"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-white font-mono font-bold text-xs focus:outline-none focus:border-cyan-500 pr-14"
+                    />
+                    <span className="absolute right-3 top-2 text-[11px] font-mono text-slate-400">
+                      Liter
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">
+                    Nilai ini terhubung langsung dengan kalkulasi % kapasitas tangki dan ruang sisa di Dasbor Monitoring BBM Real-Time.
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Lokasi Gudang */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-200 mb-1">
+                    Lokasi Rak / Tangki
+                  </label>
+                  <input
+                    type="text"
+                    value={editAlertLocation}
+                    onChange={(e) => setEditAlertLocation(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {/* Harga Beli Satuan */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-200 mb-1">
+                    Harga Satuan (IDR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={editAlertPrice}
+                    onChange={(e) => setEditAlertPrice(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingAlertItem(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: KONFIRMASI HAPUS DARI PERINGATAN STOK ================= */}
+      {alertItemToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-rose-500/50 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden text-slate-100">
+            <div className="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Hapus Barang Dari Inventaris</h3>
+                  <p className="text-xs text-slate-400">{alertItemToDelete.sku}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAlertItemToDelete(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-slate-300">
+                Apakah Anda yakin ingin menghapus <strong>{alertItemToDelete.name}</strong> dari inventaris gudang? Barang ini akan dihapus dari daftar peringatan stok dan sistem cloud.
+              </p>
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1 font-mono">
+                <div>Stok Saat Ini: <span className="text-amber-400 font-bold">{formatNumberID(alertItemToDelete.currentStock)} {alertItemToDelete.unit}</span></div>
+                <div>Ambang Batas: <span className="text-white">{formatNumberID(getMinThreshold(alertItemToDelete))} {alertItemToDelete.unit}</span></div>
+                <div>Kategori: <span className="text-slate-300">{alertItemToDelete.category}</span></div>
+                <div>Lokasi: <span className="text-slate-300">{alertItemToDelete.location}</span></div>
+              </div>
+              <p className="text-rose-400 text-[11px] italic">
+                * Tindakan ini permanen dan akan menghapus data dari cloud Firestore.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setAlertItemToDelete(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteAlertItem}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-all flex items-center gap-1.5 shadow-md shadow-rose-900/30 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Ya, Hapus Barang</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -23,6 +23,8 @@ interface FuelTankMonitorProps {
   onUpdateTankCapacity?: (itemId: string, newCapacity: number, newMinThreshold?: number, locationName?: string) => void;
   canEditCapacity?: boolean;
   onEmptyTank?: (itemId: string, reason?: string) => void;
+  onSaveItem?: (item: InventoryItem) => void;
+  onDeleteItem?: (itemId: string) => void;
 }
 
 export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({
@@ -31,14 +33,23 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({
   onUpdateTankCapacity,
   canEditCapacity = true,
   onEmptyTank,
+  onSaveItem,
+  onDeleteItem,
 }) => {
   const fuelItems = items.filter((item) => item.category === 'BBM' && item.isFuel);
 
-  // Edit Capacity Modal State
+  // Items below threshold for synchronized alert
+  const belowThresholdFuels = fuelItems.filter(isBelowMinimumThreshold);
+
+  // Edit Capacity & Threshold Modal State
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [capacityInput, setCapacityInput] = useState<string>('');
   const [thresholdInput, setThresholdInput] = useState<string>('');
+  const [stockInput, setStockInput] = useState<string>('');
   const [locationInput, setLocationInput] = useState<string>('');
+
+  // Delete Confirmation State
+  const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
 
   // Empty Tank Modal State (Kosongkan Tangki Pertamax & Solar)
   const [emptyingItem, setEmptyingItem] = useState<InventoryItem | null>(null);
@@ -51,6 +62,7 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({
     const currentCap = item.tankCapacity || (item.currentStock > 1000 ? 5000 : 1000);
     setCapacityInput(String(currentCap));
     setThresholdInput(String(getMinThreshold(item)));
+    setStockInput(String(item.currentStock));
     setLocationInput(item.location || '');
   };
 
@@ -63,11 +75,32 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({
 
     const newThresh = thresholdInput ? parseFloat(thresholdInput) : undefined;
     const newLoc = locationInput.trim() || undefined;
+    const newStock = stockInput !== '' ? parseFloat(stockInput) : editingItem.currentStock;
+
+    if (onSaveItem) {
+      onSaveItem({
+        ...editingItem,
+        currentStock: isNaN(newStock) ? editingItem.currentStock : Math.max(0, newStock),
+        tankCapacity: newCap,
+        minimumStockThreshold: newThresh !== undefined ? newThresh : editingItem.minimumStockThreshold,
+        minStockAlert: newThresh !== undefined ? newThresh : editingItem.minStockAlert,
+        location: newLoc || editingItem.location,
+        lastUpdated: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      });
+    }
 
     if (onUpdateTankCapacity) {
       onUpdateTankCapacity(editingItem.id, newCap, newThresh, newLoc);
     }
     setEditingItem(null);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!itemToDelete) return;
+    if (onDeleteItem) {
+      onDeleteItem(itemToDelete.id);
+    }
+    setItemToDelete(null);
   };
 
   // Quick capacity presets depending on fuel type
@@ -115,6 +148,164 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({
           </span>
         </div>
       </div>
+
+      {/* 🚨 PERINGATAN STOK TANGKI & DRUM BBM DI BAWAH AMBANG BATAS (REAL-TIME SENSOR) */}
+      {belowThresholdFuels.length > 0 && (
+        <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-rose-950/40 via-slate-950 to-amber-950/40 border-2 border-amber-500/60 shadow-xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-amber-500/20">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/40">
+                <AlertTriangle className="w-4 h-4 animate-bounce" />
+              </span>
+              <div>
+                <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide flex items-center gap-2">
+                  <span>PERINGATAN STOK TANGKI &amp; DRUM BBM DI BAWAH AMBANG BATAS</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                    {belowThresholdFuels.length} TANGKI MENIPIS
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-300">
+                  Data disesuaikan langsung dengan sensor level tangki &amp; drum BBM secara real-time. Lakukan pengisian BBM, kuras tangki, atau sesuaikan ambang batas/kapasitas.
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1 shrink-0 bg-emerald-500/10 px-2 py-1 rounded border border-emerald-500/30">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              SINKRONISASI LIVE SENSOR
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {belowThresholdFuels.map((item) => {
+              const threshold = getMinThreshold(item);
+              const capacity = item.tankCapacity || (item.currentStock > 1000 ? 5000 : 1000);
+              const percentage = Math.min(100, Math.round((item.currentStock / capacity) * 100));
+              const isCritical = percentage < 15 || item.currentStock <= threshold * 0.5;
+              const deficit = Math.max(0, threshold - item.currentStock);
+              const spaceLeft = Math.max(0, capacity - item.currentStock);
+
+              return (
+                <div
+                  key={`fuel-alert-${item.id}`}
+                  className={`p-3 rounded-lg border flex flex-col justify-between gap-2.5 ${
+                    isCritical
+                      ? 'bg-rose-950/30 border-rose-500/50'
+                      : 'bg-amber-950/20 border-amber-500/40'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-xs font-mono">
+                        <span className="font-bold text-amber-400">{item.sku}</span>
+                        <span className="text-slate-500">&bull;</span>
+                        <span className="text-slate-300 truncate max-w-[160px]">{item.location}</span>
+                      </div>
+                      <h4 className="text-sm font-bold text-white mt-0.5">{item.name}</h4>
+                    </div>
+
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                        isCritical
+                          ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse'
+                          : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      }`}
+                    >
+                      {isCritical ? '🚨 KRITIS' : '⚠️ MENIPIS'} ({percentage}%)
+                    </span>
+                  </div>
+
+                  {/* Level numbers & progress */}
+                  <div className="space-y-1.5 font-mono text-xs bg-slate-950/70 p-2 rounded border border-slate-800">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-slate-400 text-[11px]">Level Stok Fisik:</span>
+                      <span className="font-bold text-white">
+                        <span className={isCritical ? 'text-rose-400' : 'text-amber-400'}>
+                          {formatNumberID(item.currentStock)}
+                        </span>{' '}
+                        <span className="text-slate-400 text-[10px]">/ {formatNumberID(capacity)} L ({percentage}%)</span>
+                      </span>
+                    </div>
+
+                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all rounded-full ${
+                          isCritical ? 'bg-gradient-to-r from-rose-600 to-rose-400' : 'bg-gradient-to-r from-amber-600 to-amber-400'
+                        }`}
+                        style={{ width: `${Math.max(5, percentage)}%` }}
+                      />
+                    </div>
+
+                    <div className="flex justify-between text-[11px] pt-1 border-t border-slate-800/80">
+                      <span className="text-slate-400">
+                        Ambang Min: <strong className="text-slate-200">{formatNumberID(threshold)} L</strong>
+                      </span>
+                      <span className="text-rose-400 font-semibold">
+                        Defisit: -{formatNumberID(deficit)} L
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between text-[10px] text-slate-400">
+                      <span>Sisa Ruang Tangki Kosong:</span>
+                      <span className="text-emerald-400 font-semibold">+{formatNumberID(spaceLeft)} Liter</span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons: Edit & Simpan, Isi BBM, Kosongkan, Hapus */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-slate-800/70">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(item)}
+                      className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Edit kapasitas dan ambang batas minimum tangki"
+                    >
+                      <Edit2 className="w-3 h-3 text-amber-400" />
+                      <span>Edit &amp; Simpan</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onQuickAction(item, 'IN')}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+                      title="Isi tangki BBM"
+                    >
+                      <ArrowDownRight className="w-3 h-3" />
+                      <span>Isi BBM (+L)</span>
+                    </button>
+
+                    {onEmptyTank && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmptyingItem(item);
+                          setEmptyReason('Kuras & Pembersihan Tangki Berkala');
+                          setEmptyCustomNotes('');
+                        }}
+                        disabled={item.currentStock <= 0}
+                        className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                        title="Kosongkan isi tangki"
+                      >
+                        <Trash2 className="w-3 h-3 text-slate-400" />
+                        <span>Kosongkan</span>
+                      </button>
+                    )}
+
+                    {onDeleteItem && (
+                      <button
+                        type="button"
+                        onClick={() => setItemToDelete(item)}
+                        className="p-1.5 rounded-lg bg-rose-950/30 hover:bg-rose-900/50 text-rose-400 border border-rose-800/50 text-xs transition-colors cursor-pointer ml-auto"
+                        title="Hapus tangki / drum dari inventaris"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         {fuelItems.map((item) => {
@@ -340,6 +531,17 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({
                     <span>Kosongkan Tangki</span>
                   </button>
                 )}
+
+                {onDeleteItem && (
+                  <button
+                    type="button"
+                    onClick={() => setItemToDelete(item)}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-700 hover:border-rose-700 transition-colors cursor-pointer"
+                    title={`Hapus data ${item.name} dari sistem`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           );
@@ -388,6 +590,28 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({
                   <span className="text-slate-400 block text-[11px]">Kapasitas Sekarang:</span>
                   <span className="text-sm font-bold font-mono text-amber-400">
                     {formatNumberID(editingItem.tankCapacity || (editingItem.currentStock > 1000 ? 5000 : 1000))} Liter
+                  </span>
+                </div>
+              </div>
+
+              {/* Input Stok Fisik Saat Ini */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-200 mb-1.5">
+                  Stok Fisik Saat Ini (Liter) <span className="text-rose-400">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={stockInput}
+                    onChange={(e) => setStockInput(e.target.value)}
+                    required
+                    min="0"
+                    step="any"
+                    placeholder="Contoh: 1500"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white font-mono font-bold text-sm focus:outline-none focus:border-amber-500 pr-16"
+                  />
+                  <span className="absolute right-3.5 top-2 text-xs font-mono text-slate-400">
+                    Liter
                   </span>
                 </div>
               </div>
@@ -646,6 +870,62 @@ export const FuelTankMonitor: React.FC<FuelTankMonitorProps> = ({
                       ? 'Mengosongkan...'
                       : 'Ya, Kosongkan Tangki (0 L)'}
                   </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: KONFIRMASI HAPUS TANGKI BBM ================= */}
+      {itemToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-slate-900 border border-rose-500/50 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden text-slate-100">
+            <div className="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Hapus Tangki / Drum BBM</h3>
+                  <p className="text-xs text-slate-400">{itemToDelete.sku}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setItemToDelete(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 text-xs">
+              <p className="text-slate-300">
+                Apakah Anda yakin ingin menghapus data tangki <strong>{itemToDelete.name}</strong> dari inventaris gudang dan sistem monitoring?
+              </p>
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-1 font-mono">
+                <div>Stok Fisik Saat Ini: <span className="text-amber-400 font-bold">{formatNumberID(itemToDelete.currentStock)} Liter</span></div>
+                <div>Kapasitas Tangki: <span className="text-white">{formatNumberID(itemToDelete.tankCapacity || 0)} Liter</span></div>
+                <div>Lokasi: <span className="text-slate-300">{itemToDelete.location}</span></div>
+              </div>
+              <p className="text-rose-400 text-[11px] italic">
+                * Data tangki ini akan dihapus permanen dari cloud Firestore dan daftar peringatan stok.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setItemToDelete(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 transition-all flex items-center gap-1.5 shadow-md shadow-rose-900/30 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Ya, Hapus Tangki</span>
                 </button>
               </div>
             </div>

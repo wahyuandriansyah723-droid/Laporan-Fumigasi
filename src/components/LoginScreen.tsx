@@ -77,7 +77,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   authUsers: propAuthUsers,
 }) => {
   // Use passed authUsers or load from persistent storage
-  const activeAuthUsers = propAuthUsers || loadStoredAuthUsers();
+  const activeAuthUsers = propAuthUsers && propAuthUsers.length > 0 ? propAuthUsers : loadStoredAuthUsers();
+  const mainAdmin = activeAuthUsers.find((u) => u.role === 'ADMIN');
 
   // Main login form inputs (kosong agar pengguna memasukkan kredensial sendiri)
   const [username, setUsername] = useState('');
@@ -394,7 +395,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
               </div>
 
               <p>
-                Jika Anda lupa password atau memerlukan ID login baru, silakan hubungi <strong>Bpk. Hendra Wijaya (Admin Gudang)</strong>.
+                Jika Anda lupa password atau memerlukan ID login baru, silakan hubungi{' '}
+                <strong>{mainAdmin ? `${mainAdmin.name} (${mainAdmin.roleTitle || 'Admin Gudang'})` : 'Bpk. Hendra Wijaya (Admin Gudang)'}</strong>.
               </p>
             </div>
 

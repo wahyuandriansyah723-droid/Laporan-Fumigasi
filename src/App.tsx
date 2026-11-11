@@ -16,7 +16,7 @@ import {
   BatchItem,
 } from './types/inventory';
 import { AuthUser } from './types/auth';
-import { INITIAL_AUTH_USERS, loadStoredAuthUsers, saveStoredAuthUsers } from './data/initialAuthUsers';
+import { INITIAL_AUTH_USERS, loadStoredAuthUsers, saveStoredAuthUsers, getDefaultPermissionsForRole } from './data/initialAuthUsers';
 import { LoginScreen } from './components/LoginScreen';
 import { LoginDashboard } from './components/LoginDashboard';
 import { AdminUsersManagementView } from './components/AdminUsersManagementView';
@@ -56,8 +56,11 @@ import { RawMaterialRecommendationModal } from './components/RawMaterialRecommen
 import { TreatmentExecutionModal } from './components/TreatmentExecutionModal';
 import { FumigationJobReport, JobType } from './types/jobs';
 import { RawMaterialRecommendation, TreatmentExecutionRecord } from './types/recommendations';
+import { QuarterlyPestPlan } from './types/pestAnalysis';
 import { INITIAL_JOB_REPORTS } from './data/initialJobReports';
 import { INITIAL_RAW_RECOMMENDATIONS } from './data/initialRecommendations';
+import { INITIAL_QUARTERLY_PLANS } from './data/initialPestAnalysisData';
+import { QuarterlyPestAnalysisView } from './components/QuarterlyPestAnalysisView';
 import { exportInventoryToCSV, exportMutationsToCSV } from './utils/exportImport';
 import {
   Boxes,
@@ -88,6 +91,7 @@ import {
   KeyRound,
   Users,
   Sparkles,
+  CalendarRange,
 } from 'lucide-react';
 import { isBelowMinimumThreshold, isCriticallyBelowThreshold } from './utils/stockUtils';
 
@@ -108,6 +112,9 @@ import {
   subscribeRawRecommendations,
   saveRawRecommendation,
   deleteRawRecommendation,
+  subscribeQuarterlyPestPlans,
+  saveQuarterlyPestPlan,
+  deleteQuarterlyPestPlan,
   subscribeAuthUsers,
   saveAuthUser,
   deleteAuthUser,
@@ -140,6 +147,7 @@ export default function App() {
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SYSTEM_SETTINGS);
   const [jobReports, setJobReports] = useState<FumigationJobReport[]>(INITIAL_JOB_REPORTS);
   const [rawRecommendations, setRawRecommendations] = useState<RawMaterialRecommendation[]>(INITIAL_RAW_RECOMMENDATIONS);
+  const [quarterlyPlans, setQuarterlyPlans] = useState<QuarterlyPestPlan[]>(INITIAL_QUARTERLY_PLANS);
   const [authUsers, setAuthUsers] = useState<AuthUser[]>(INITIAL_AUTH_USERS);
 
   // Initialize and seed Firestore if empty, and subscribe to real-time listeners for all devices (HP, Laptop, PC)
@@ -158,8 +166,31 @@ export default function App() {
     const unsubRecs = subscribeRawRecommendations((data) => {
       setRawRecommendations(data || []);
     });
+    const unsubPestPlans = subscribeQuarterlyPestPlans((data) => {
+      setQuarterlyPlans(data && data.length > 0 ? data : INITIAL_QUARTERLY_PLANS);
+    });
     const unsubUsers = subscribeAuthUsers((data) => {
-      setAuthUsers(data || []);
+      const userList = data && data.length > 0 ? data : INITIAL_AUTH_USERS;
+      setAuthUsers(userList);
+      saveStoredAuthUsers(userList);
+
+      // Sinkronisasi Interkoneksi Semua ID (Admin, Operator, QC):
+      // Jika data akun yang sedang login diubah (nama, wewenang peran, kata sandi), perbarui sesi aktif secara live!
+      // Jika akun dihapus oleh Admin di perangkat lain atau Vercel, lakukan logout otomatis demi integritas sistem.
+      setCurrentUser((prevUser) => {
+        if (!prevUser) return null;
+        const matchingUser = userList.find(
+          (u) => u.id === prevUser.id || u.username.toLowerCase() === prevUser.username.toLowerCase()
+        );
+        if (matchingUser) {
+          return {
+            ...matchingUser,
+            permissions: matchingUser.permissions || getDefaultPermissionsForRole(matchingUser.role),
+          };
+        } else {
+          return null;
+        }
+      });
     });
     const unsubSettings = subscribeSystemSettings((data) => {
       if (data && data.companyName) setSettings(data);
@@ -195,6 +226,7 @@ export default function App() {
       unsubTrx();
       unsubJobs();
       unsubRecs();
+      unsubPestPlans();
       unsubUsers();
       unsubSettings();
       unsubSuppliers();
@@ -225,7 +257,8 @@ export default function App() {
     | 'master'
     | 'settings'
     | 'login_dashboard'
-    | 'admin_users';
+    | 'admin_users'
+    | 'pest_quarterly_analysis';
 
   const [currentTab, setCurrentTab] = useState<AppTab>(() => {
     return currentUser?.role === 'QC' ? 'qc_reports' : 'dashboard';
@@ -841,6 +874,17 @@ export default function App() {
     showToast('Rekomendasi bahan baku berhasil dihapus.');
   };
 
+  // Quarterly Pest Infestation Plan Handlers (Admin, Operator, QC)
+  const handleSaveQuarterlyPlan = async (plan: QuarterlyPestPlan) => {
+    await saveQuarterlyPestPlan(plan);
+    showToast(`Rencana penanganan kutu ${plan.quarterLabel} berhasil disimpan ke cloud.`);
+  };
+
+  const handleDeleteQuarterlyPlan = async (planId: string) => {
+    await deleteQuarterlyPestPlan(planId);
+    showToast('Rencana penanganan triwulan berhasil dihapus.');
+  };
+
   const handleExecuteRecAsSPK = (rec: RawMaterialRecommendation) => {
     setRecToExecuteAsSPK(rec);
     setIsOperatorJobModalOpen(true);
@@ -908,16 +952,27 @@ export default function App() {
 
   // ================= ADMIN: KELOLA ID & PASSWORD PENGGUNA =================
   const handleSaveUser = async (user: AuthUser, isNew: boolean) => {
-    await saveAuthUser(user);
-
-    if (currentUser && currentUser.id === user.id) {
-      setCurrentUser(user);
+    // Optimistic local state update
+    const updatedUsers = authUsers.map((u) => (u.id === user.id ? user : u));
+    if (!updatedUsers.some((u) => u.id === user.id)) {
+      updatedUsers.push(user);
     }
+    setAuthUsers(updatedUsers);
+    saveStoredAuthUsers(updatedUsers);
+
+    if (currentUser && (currentUser.id === user.id || currentUser.username.toLowerCase() === user.username.toLowerCase())) {
+      setCurrentUser({
+        ...user,
+        permissions: user.permissions || getDefaultPermissionsForRole(user.role),
+      });
+    }
+
+    await saveAuthUser(user);
 
     showToast(
       isNew
-        ? `Akun ID "${user.username}" (${user.name}) berhasil dibuat di cloud Firestore.`
-        : `Data ID & kata sandi "${user.username}" berhasil diperbarui di cloud Firestore.`
+        ? `Akun ID "${user.username}" (${user.name} - ${user.role}) berhasil dibuat & tersinkron ke semua peran.`
+        : `Data ID & kata sandi "${user.username}" (${user.name}) berhasil diperbarui & tersinkron secara instan.`
     );
   };
 
@@ -929,8 +984,16 @@ export default function App() {
       return;
     }
 
+    const updatedUsers = authUsers.filter((u) => u.id !== userId);
+    setAuthUsers(updatedUsers);
+    saveStoredAuthUsers(updatedUsers);
+
+    if (currentUser && currentUser.id === userId) {
+      setCurrentUser(null);
+    }
+
     await deleteAuthUser(userId);
-    showToast(`Akun ID "${target?.username || userId}" telah dihapus.`);
+    showToast(`Akun ID "${target?.username || userId}" telah dihapus dari cloud & semua perangkat.`);
   };
 
   // Reset to initial demo dataset
@@ -1486,6 +1549,36 @@ export default function App() {
                 </span>
               )}
             </button>
+
+            {/* 3. Analisa Kutu Triwulan & SOP Penanganan Bulanan (Khusus Admin sesuai instruksi) */}
+            {currentUser.role === 'ADMIN' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCurrentTab('pest_quarterly_analysis');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  currentTab === 'pest_quarterly_analysis'
+                    ? 'bg-indigo-600 text-white font-bold shadow-md shadow-indigo-500/20'
+                    : 'text-indigo-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CalendarRange className="w-4 h-4 shrink-0 text-indigo-400" />
+                  <span className="truncate">Analisa Kutu Triwulan &amp; SOP</span>
+                </div>
+                <span
+                  className={`px-1.5 py-0.2 rounded font-mono text-[10px] font-bold ${
+                    currentTab === 'pest_quarterly_analysis'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                  }`}
+                >
+                  Q4
+                </span>
+              </button>
+            )}
           </div>
 
           {/* 3. Dashboard & Tangki BBM (Dikecualikan untuk QC sesuai permintaan pengguna) */}
@@ -1793,6 +1886,7 @@ export default function App() {
                 {currentTab === 'settings' && 'Pengaturan Sistem & Backup'}
                 {currentTab === 'admin_users' && 'Dasbor Manajemen ID & Password Pengguna (Admin)'}
                 {currentTab === 'login_dashboard' && 'Pratinjau Layar Login'}
+                {currentTab === 'pest_quarterly_analysis' && 'Analisa Intensitas Kutu Triwulan & SOP Penanganan Bulanan'}
               </span>
               <span className="text-slate-700 hidden sm:inline">|</span>
               <span className="text-xs text-slate-400 font-mono hidden lg:inline">
@@ -1961,6 +2055,7 @@ export default function App() {
           <QCJobReportsView
             jobReports={jobReports}
             currentUser={currentUser}
+            authUsers={authUsers}
             onUpdateJobReport={handleUpdateJobReport}
             onDeleteJobReport={handleDeleteJobReport}
             onDeleteAllJobReports={handleDeleteAllJobReports}
@@ -1968,6 +2063,7 @@ export default function App() {
               if (preselectedType) setOperatorModalJobType(preselectedType);
               setIsOperatorJobModalOpen(true);
             }}
+            onNavigateToTab={(tab) => setCurrentTab(tab)}
             onShowToast={showToast}
           />
         )}
@@ -1976,6 +2072,7 @@ export default function App() {
           <QCJobReportsView
             jobReports={jobReports}
             currentUser={currentUser}
+            authUsers={authUsers}
             onUpdateJobReport={handleUpdateJobReport}
             onDeleteJobReport={handleDeleteJobReport}
             onDeleteAllJobReports={handleDeleteAllJobReports}
@@ -1984,6 +2081,7 @@ export default function App() {
               setOperatorModalJobType('FUMIGASI');
               setIsOperatorJobModalOpen(true);
             }}
+            onNavigateToTab={(tab) => setCurrentTab(tab)}
             onShowToast={showToast}
           />
         )}
@@ -1992,6 +2090,7 @@ export default function App() {
           <QCJobReportsView
             jobReports={jobReports}
             currentUser={currentUser}
+            authUsers={authUsers}
             onUpdateJobReport={handleUpdateJobReport}
             onDeleteJobReport={handleDeleteJobReport}
             onDeleteAllJobReports={handleDeleteAllJobReports}
@@ -2000,6 +2099,7 @@ export default function App() {
               setOperatorModalJobType('SPRAYING_FOGGING');
               setIsOperatorJobModalOpen(true);
             }}
+            onNavigateToTab={(tab) => setCurrentTab(tab)}
             onShowToast={showToast}
           />
         )}
@@ -2026,6 +2126,7 @@ export default function App() {
               setRecForExecutionModal(rec);
               setIsTreatmentExecutionModalOpen(true);
             }}
+            onNavigateToTab={(tab) => setCurrentTab(tab)}
             onShowToast={showToast}
           />
         )}
@@ -2052,6 +2153,7 @@ export default function App() {
               setRecForExecutionModal(rec);
               setIsTreatmentExecutionModalOpen(true);
             }}
+            onNavigateToTab={(tab) => setCurrentTab(tab)}
             onShowToast={showToast}
           />
         )}
@@ -2077,8 +2179,45 @@ export default function App() {
               setRecForExecutionModal(rec);
               setIsTreatmentExecutionModalOpen(true);
             }}
+            onNavigateToTab={(tab) => setCurrentTab(tab)}
             onShowToast={showToast}
           />
+        )}
+
+        {/* Analisa Kutu Triwulan & SOP Penanganan Bulanan (Hanya ditampilkan untuk Admin) */}
+        {currentTab === 'pest_quarterly_analysis' && (
+          currentUser.role === 'ADMIN' ? (
+            <QuarterlyPestAnalysisView
+              currentUser={currentUser}
+              items={items}
+              jobReports={jobReports}
+              recommendations={rawRecommendations}
+              quarterlyPlans={quarterlyPlans}
+              onSaveQuarterlyPlan={handleSaveQuarterlyPlan}
+              onDeleteQuarterlyPlan={handleDeleteQuarterlyPlan}
+              onOpenNewJobModal={(preselectedType) => {
+                if (preselectedType) setOperatorModalJobType(preselectedType);
+                setIsOperatorJobModalOpen(true);
+              }}
+              onNavigateToTab={(tab) => setCurrentTab(tab)}
+              onShowToast={showToast}
+            />
+          ) : (
+            <div className="bg-slate-900 border border-rose-500/30 rounded-2xl p-8 text-center max-w-lg mx-auto my-12 shadow-xl">
+              <ShieldAlert className="w-12 h-12 text-rose-400 mx-auto mb-3" />
+              <h3 className="text-base font-bold text-white mb-2">Akses Terbatas: Khusus Administrator</h3>
+              <p className="text-xs text-slate-300 mb-5 leading-relaxed">
+                Fitur Analisa Intensitas Kutu Triwulan &amp; SOP Penanganan Bulanan hanya dapat diakses oleh akun Admin.
+              </p>
+              <button
+                type="button"
+                onClick={() => setCurrentTab('dashboard')}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-indigo-600/30"
+              >
+                Kembali ke Beranda
+              </button>
+            </div>
+          )
         )}
 
         {currentTab === 'crosscheck' && (
@@ -2120,6 +2259,12 @@ export default function App() {
             }}
             onUpdateTankCapacity={handleUpdateTankCapacity}
             onEmptyTank={handleEmptyTank}
+            onSaveItem={handleSaveItem}
+            onDeleteItem={handleDeleteItem}
+            onEditItem={(item) => {
+              setItemToEdit(item);
+              setIsAddItemModalOpen(true);
+            }}
           />
         )}
 
@@ -2423,6 +2568,7 @@ export default function App() {
         }}
         items={items}
         currentUser={currentUser}
+        authUsers={authUsers}
         operators={operators}
         destinations={destinations}
         settings={settings}
